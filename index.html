@@ -1310,12 +1310,13 @@ document.getElementById('signupSubmitBtn').addEventListener('click', async () =>
 
 document.getElementById('authGoogleBtn').addEventListener('click', async () => {
   if (!supa) return;
-  const { error } = await supa.auth.signInWithOAuth({ provider: 'google' });
+  const { error } = await supa.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: 'https://akuma079.github.io/table-watch/'
+    }
+  });
   if (error) showAuthError(t('auth_provider_not_configured'));
-});
-
-  if (error) showAuthError(t('auth_provider_not_configured'));
-});
 });
 async function logoutUser() {
   if (supa) await supa.auth.signOut();
