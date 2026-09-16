@@ -1,0 +1,2362 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Sunday City - Black List Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg: #0D1622;
+    --felt: #1A2A3D;
+    --felt-line: #2E4359;
+    --card: #131D29;
+    --card-line: #223243;
+    --gold: #F5B942;
+    --gold-soft: rgba(245,185,66,.16);
+    --gold-dim: #B9882E;
+    --coral: #FF7A5C;
+    --red: #FF5470;
+    --red-soft: rgba(255,84,112,.16);
+    --text: #FBF3E7;
+    --text-dim: #91A1B4;
+    --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+    --hairline: var(--card-line);
+    --card-raised: var(--card);
+    --green: #2FC1A0;
+  }
+  :root[data-theme="light"] {
+    --bg: #FBF6EC;
+    --felt: #FFF1E6;
+    --felt-line: #F0D9C4;
+    --card: #FFFFFF;
+    --card-line: #E7DECB;
+    --text: #291F14;
+    --text-dim: #8A7C63;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background:
+      radial-gradient(620px 280px at 50% -60px, rgba(255,122,92,.16), transparent 65%),
+      radial-gradient(500px 240px at 90% 120px, rgba(47,193,160,.08), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 16px 16px 90px; }
+
+  /* Tablette */
+  @media (min-width: 700px) {
+    .wrap { max-width: 640px; padding-top: 28px; }
+    header.top h1 { font-size: 38px; }
+    .community-banner .n { font-size: 36px; }
+    .card { padding: 20px; }
+    .quick-add input, .reason-select, textarea { font-size: 15px; }
+  }
+
+  /* Ordinateur */
+  @media (min-width: 1024px) {
+    .wrap { max-width: 760px; padding-top: 36px; }
+    body { font-size: 15px; }
+    header.top h1 { font-size: 44px; }
+    .stats-row .stat-mini .n { font-size: 19px; }
+    .card:hover { border-color: var(--gold-dim); }
+    .admin-overlay { padding: 40px calc(50% - 380px) 60px; }
+  }
+
+  .lang-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .lang-select {
+    background: var(--card); color: var(--text-dim); border: 1px solid var(--card-line);
+    border-radius: 7px; padding: 6px 10px; font-size: 12px; font-family: 'Inter', sans-serif;
+    font-weight: 600; letter-spacing: 0.3px;
+  }
+  .lang-select:focus { outline: none; border-color: var(--gold-dim); color: var(--text); }
+  .live-dot { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-dim); letter-spacing: 0.4px; }
+  .live-dot i {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 0 3px rgba(47,193,160,.18);
+  }
+
+  .community-banner {
+    background: linear-gradient(120deg, rgba(255,122,92,.18), rgba(47,193,160,.14));
+    border: 1px solid var(--felt-line); border-radius: 12px; padding: 14px 16px;
+    text-align: center; margin-bottom: 14px;
+  }
+  .community-banner .n {
+    font-family: 'Oswald', sans-serif; font-size: 30px; font-weight: 700; color: var(--gold);
+    display: block; line-height: 1.1;
+  }
+  .community-banner .l { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+
+  .stats-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .stats-row .stat-mini {
+    flex: 1; background: var(--card); border: 1px solid var(--card-line); border-radius: 9px;
+    padding: 8px 6px; text-align: center;
+  }
+  .stats-row .stat-mini .n { font-family: 'Oswald', sans-serif; font-size: 16px; color: var(--text); font-weight: 600; }
+  .stats-row .stat-mini .l { font-size: 9.5px; color: var(--text-dim); margin-top: 1px; }
+
+  header.top { padding: 2px 0 16px; margin-bottom: 16px; position: relative; text-align: center; }
+  header.top h1 {
+    font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 32px;
+    letter-spacing: 0.5px; margin: 0; line-height: 1.15;
+    background: linear-gradient(100deg, var(--coral) 0%, var(--gold) 65%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header.top .sub { font-size: 12.5px; color: var(--text-dim); margin-top: 5px; }
+  header.top::after {
+    content: ""; display: block; margin-top: 16px; height: 1px;
+    background-image: linear-gradient(to right, var(--coral) 55%, transparent 0%);
+    background-size: 10px 1px; opacity: 0.45;
+  }
+
+  .tabs { display: flex; justify-content: center; gap: 22px; margin-bottom: 18px; border-bottom: 1px solid var(--card-line); }
+  .tab-btn {
+    flex: 0 0 auto; padding: 4px 2px 11px; text-align: left; border-radius: 0;
+    border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--text-dim);
+    font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
+    padding: 15px; margin-bottom: 14px;
+  }
+  .card h2 {
+    font-family: 'Oswald', sans-serif; font-size: 14px; font-weight: 500;
+    letter-spacing: 0.2px; margin: 0 0 8px; color: var(--text);
+  }
+  .card p.hint { font-size: 12px; color: var(--text-dim); margin: 0 0 10px; line-height: 1.55; }
+
+  .card-featured {
+    background:
+      radial-gradient(240px 110px at 12% 0%, rgba(255,122,92,.20), transparent 65%),
+      radial-gradient(200px 90px at 100% 100%, rgba(47,193,160,.10), transparent 60%),
+      var(--felt);
+    border: 1px solid var(--felt-line);
+  }
+  .card-featured h2 { color: var(--gold); }
+
+  textarea {
+    width: 100%; min-height: 90px; background: #0F1720; color: var(--text);
+    border: 1px solid var(--card-line); border-radius: 8px; padding: 10px;
+    font-family: var(--mono); font-size: 13.5px; resize: vertical; line-height: 1.5;
+  }
+  :root[data-theme="light"] textarea, :root[data-theme="light"] input, :root[data-theme="light"] select { background: #FFFDF8 !important; }
+  textarea:focus { outline: none; border-color: var(--gold-dim); }
+
+  .row-btns { display: flex; gap: 8px; margin-top: 10px; }
+  button {
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px;
+    border-radius: 8px; border: none; padding: 10px 14px; cursor: pointer;
+    transition: transform 0.08s ease, opacity 0.15s ease;
+  }
+  button:active { transform: scale(0.98); }
+  .btn-primary { background: var(--gold); color: #17130E; flex: 1; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--card-line); }
+
+  .empty-state { text-align: center; padding: 34px 14px; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
+  .empty-state svg { opacity: 0.35; margin-bottom: 10px; }
+
+  .bl-list { display: flex; flex-direction: column; gap: 7px; }
+  .bl-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--card-line); border-left: 3px solid var(--gold-dim);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .bl-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .bl-name { font-family: var(--mono); font-size: 13.5px; font-weight: 600; letter-spacing: 0.2px; }
+  .bl-meta { font-size: 11px; color: var(--text-dim); }
+  .bl-reason { font-size: 11px; color: var(--gold); margin-top: 2px; font-style: italic; }
+  .bl-remove {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--card-line);
+    padding: 6px 10px; font-size: 12px; flex-shrink: 0; margin-left: 10px; border-radius: 7px;
+  }
+  .trust-badge {
+    font-size: 9.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+    margin-left: 6px; white-space: nowrap; background: transparent; border: 1px solid var(--card-line); color: var(--text-dim);
+  }
+  .trust-badge.strong { background: var(--red-soft); border-color: var(--red); color: var(--red); }
+
+  .quick-add { display: flex; gap: 8px; }
+  .quick-add input {
+    flex: 1; background: #0F1720; color: var(--text); border: 1px solid var(--card-line);
+    border-radius: 8px; padding: 10px; font-size: 14px; min-width: 0; font-family: var(--mono);
+  }
+  .quick-add input:focus { outline: none; border-color: var(--gold-dim); }
+  .reason-select, .reason-custom {
+    width: 100%; margin-top: 8px; background: #0F1720; color: var(--text);
+    border: 1px solid var(--card-line); border-radius: 8px; padding: 10px; font-size: 13px;
+    font-family: 'Inter', sans-serif;
+  }
+  .reason-select:focus, .reason-custom:focus { outline: none; border-color: var(--gold-dim); }
+
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--gold); color: #17130E; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; border-radius: 20px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s; max-width: 90%; text-align: center; z-index: 500;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+
+  .bl-count-line { font-size: 13px; color: var(--text); text-align: center; margin: 4px 0 14px; font-weight: 600; }
+  .bl-count-line .n { color: var(--gold); font-family: 'Oswald', sans-serif; font-size: 20px; }
+  .pending-line {
+    font-size: 11px; color: var(--gold); text-align: center; margin: -4px 0 14px;
+    background: var(--gold-soft); border: 1px solid var(--gold-dim); border-radius: 7px; padding: 6px 10px;
+  }
+
+  .session-card { background: linear-gradient(135deg, rgba(255,122,92,.08), rgba(47,193,160,.06)); }
+
+  .room-list { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+  .room-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,.03); border: 1px solid var(--card-line); border-radius: 8px;
+    padding: 9px 10px;
+  }
+  .room-row .tag { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .room-row .choices { display: flex; gap: 6px; }
+  .room-choice-btn {
+    width: 34px; height: 34px; border-radius: 8px; font-size: 16px; padding: 0;
+    background: transparent; border: 1px solid var(--card-line); color: var(--text-dim);
+  }
+  .room-choice-btn.no.active { background: var(--red); color: #fff; border-color: var(--red); }
+  .room-choice-btn.yes.active { background: rgba(47,193,160,.2); border-color: var(--green); color: var(--green); }
+  .room-remove-btn { background: transparent; border: none; color: var(--text-dim); font-size: 16px; padding: 0 4px; }
+  .session-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .session-reset-btn { padding: 6px 10px; font-size: 11px; }
+  .session-stats { display: flex; gap: 10px; }
+  .session-stat {
+    flex: 1; background: rgba(255,255,255,.03);
+    border: 1px solid var(--card-line); border-radius: 9px; padding: 12px; text-align: center;
+  }
+  .session-n { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--gold); font-weight: 600; }
+  .session-l { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+  .session-plus {
+    margin-top: 8px; width: 100%; background: var(--gold-soft); color: var(--gold);
+    border: 1px solid var(--gold-dim); padding: 6px 0; font-size: 12px; border-radius: 6px;
+  }
+
+  .history-toggle {
+    display: block; width: 100%; background: transparent; color: var(--text-dim);
+    border: 1px dashed var(--card-line); padding: 9px 12px; font-size: 12.5px;
+    border-radius: 8px; margin-bottom: 10px;
+  }
+  .history-list { display: none; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .history-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 8px;
+    padding: 8px 12px; font-size: 12.5px;
+  }
+  .history-row .tag { font-family: var(--mono); }
+  .history-row .result.known { color: var(--red); font-weight: 700; }
+  .history-row .result.unknown { color: var(--green); font-weight: 700; }
+
+  .dispute-card { border: 1px dashed var(--card-line); }
+
+  .admin-link { display: block; text-align: center; font-size: 11.5px; color: var(--text-dim); margin: 24px 0 4px; opacity: 0.6; }
+  .admin-panel-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 7px; font-size: 12.5px;
+  }
+  .admin-section-title { font-family: 'Oswald', sans-serif; font-size: 13px; color: var(--gold); margin: 18px 0 8px; }
+  .admin-dispute-actions { display: flex; gap: 6px; }
+  .admin-dispute-actions button { padding: 5px 9px; font-size: 11px; }
+
+  .onboard-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 30px; text-align: center;
+  }
+  .onboard-slide { display: none; max-width: 340px; }
+  .onboard-slide.active { display: block; }
+  .onboard-slide .emoji { font-size: 44px; margin-bottom: 18px; }
+  .onboard-slide h3 { font-family: 'Oswald', sans-serif; color: var(--gold); font-size: 20px; margin: 0 0 10px; }
+  .onboard-slide p { font-size: 14px; color: var(--text-dim); line-height: 1.6; }
+  .onboard-dots { display: flex; gap: 6px; margin: 22px 0; }
+  .onboard-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--card-line); }
+  .onboard-dots span.active { background: var(--gold); }
+  .theme-toggle-btn {
+    position: fixed; top: 14px; right: 14px; z-index: 400;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--card); border: 1px solid var(--card-line);
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+    padding: 0;
+  }
+  .onboard-next { background: var(--gold); color: #17130E; padding: 12px 28px; border-radius: 24px; font-weight: 700; }
+
+  .auth-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 900;
+    display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;
+  }
+  .auth-box { width: 100%; max-width: 360px; padding: 10px 0; }
+  .auth-box h2 {
+    font-family: 'Oswald', sans-serif; font-size: 22px; text-align: center; margin: 0 0 20px;
+    background: linear-gradient(100deg, var(--coral) 0%, var(--gold) 65%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .auth-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+  .auth-tab {
+    flex: 1; background: var(--card); color: var(--text-dim); border: 1px solid var(--card-line);
+    padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  }
+  .auth-tab.active { background: var(--gold); color: #17130E; border-color: var(--gold); }
+  .auth-oauth { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .auth-oauth-btn { width: 100%; }
+  .google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #3c4043; border: 1px solid #dadce0; font-weight: 600; }
+  .google-btn:active { background: #f7f7f7; }
+  .auth-divider {
+    text-align: center; font-size: 11px; color: var(--text-dim); margin: 4px 0 16px; position: relative;
+  }
+  .auth-divider::before, .auth-divider::after {
+    content: ""; position: absolute; top: 50%; width: 42%; height: 1px; background: var(--card-line);
+  }
+  .auth-divider::before { left: 0; }
+  .auth-divider::after { right: 0; }
+  .auth-input {
+    width: 100%; background: #0F1720; color: var(--text); border: 1px solid var(--card-line);
+    border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 10px; font-family: 'Inter', sans-serif;
+  }
+  .auth-input:focus { outline: none; border-color: var(--gold-dim); }
+  .auth-error { color: var(--red); font-size: 12.5px; text-align: center; margin-top: 10px; }
+  .auth-error.auth-success { color: var(--green); }
+
+  .dropdown-menu {
+    position: fixed; top: 58px; left: 14px; z-index: 401;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
+    min-width: 190px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .dropdown-item {
+    display: flex; align-items: center; justify-content: space-between; width: 100%;
+    background: transparent; color: var(--text); border: none; padding: 10px 12px;
+    font-size: 13px; border-radius: 7px; text-align: left;
+  }
+  .dropdown-item:active { background: var(--gold-soft); }
+  .dropdown-badge {
+    background: var(--red); color: #fff; font-size: 10px; font-weight: 700;
+    border-radius: 10px; padding: 2px 7px; margin-left: 8px;
+  }
+  .dropdown-sep { height: 1px; background: var(--card-line); margin: 6px 4px; }
+
+  .modal-box-large { max-width: 400px; max-height: 80vh; overflow-y: auto; text-align: left; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .modal-header h3 { margin: 0; }
+  .modal-body-text { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+  .modal-body-text h4 { color: var(--text); font-size: 13.5px; margin: 16px 0 6px; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 600;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-box {
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 14px;
+    padding: 22px; width: 100%; max-width: 340px;
+  }
+  .modal-box h3 { font-family: 'Oswald', sans-serif; font-size: 16px; color: var(--gold); margin: 0; }
+
+  .admin-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 550;
+    overflow-y: auto; padding: 20px 16px 60px;
+  }
+  .admin-overlay-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; position: sticky; top: 0; background: var(--bg); padding: 4px 0 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="auth-overlay" id="authOverlay" style="display:none;">
+  <div class="auth-box">
+    <h2 id="authAppTitle">Sunday City - Black List Tool</h2>
+    <div id="authTabs" class="auth-tabs">
+      <button class="auth-tab active" data-authtab="login" data-i18n="auth_tab_login">Connexion</button>
+      <button class="auth-tab" data-authtab="signup" data-i18n="auth_tab_signup">Créer un compte</button>
+    </div>
+
+    <div class="auth-oauth">
+      <button class="btn-ghost auth-oauth-btn google-btn" id="authGoogleBtn">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.3-.1-2.5-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 7.1 29.6 5 24 5c-7.7 0-14.4 4.3-17.7 10.7z"/><path fill="#4CAF50" d="M24 43c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 34.7 26.8 35.5 24 35.5c-5.2 0-9.6-3.5-11.2-8.3l-6.5 5C9.5 38.6 16.2 43 24 43z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.3 5.3C39.9 36.5 43 30.9 43 24c0-1.3-.1-2.5-.4-3.5z"/></svg>
+        <span data-i18n="auth_google">Continuer avec Google</span>
+      </button>
+    </div>
+    <div class="auth-divider"><span data-i18n="auth_or">ou</span></div>
+
+    <div id="authFormLogin">
+      <input type="email" id="loginEmail" data-i18n-placeholder="auth_email" placeholder="Email" class="auth-input">
+      <input type="password" id="loginPassword" data-i18n-placeholder="auth_password" placeholder="Mot de passe" class="auth-input">
+      <button class="btn-primary" id="loginSubmitBtn" style="width:100%;" data-i18n="auth_login_btn">Se connecter</button>
+      <div style="text-align:center; margin-top:10px;">
+        <button class="dropdown-item" id="forgotPasswordBtn" style="width:auto; display:inline; color:var(--text-dim); font-size:12px; text-decoration:underline; padding:4px;" data-i18n="auth_forgot_password">Mot de passe oublié ?</button>
+      </div>
+    </div>
+
+    <div id="authFormSignup" style="display:none;">
+      <input type="text" id="signupUsername" data-i18n-placeholder="auth_username" placeholder="Pseudo" class="auth-input">
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="signupFirstName" data-i18n-placeholder="auth_first_name" placeholder="Prénom" class="auth-input">
+        <input type="text" id="signupLastName" data-i18n-placeholder="auth_last_name" placeholder="Nom" class="auth-input">
+      </div>
+      <input type="email" id="signupEmail" data-i18n-placeholder="auth_email" placeholder="Email" class="auth-input">
+      <input type="password" id="signupPassword" data-i18n-placeholder="auth_password_new" placeholder="Mot de passe (6 caractères min.)" class="auth-input">
+      <button class="btn-primary" id="signupSubmitBtn" style="width:100%;" data-i18n="auth_signup_btn">Créer mon compte</button>
+    </div>
+
+    <div id="authError" class="auth-error" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="onboard-overlay" id="onboardOverlay" style="display:none;">
+  <div class="onboard-slide active" data-slide="0">
+    <div class="emoji">🛡️</div>
+    <h3 id="onbTitle1">Sunday City - Black List Tool</h3>
+    <p data-i18n="onb1_text">Un outil communautaire pour repérer les scammers dans les parties privées de Sunday City, alimenté par tous ses utilisateurs.</p>
+  </div>
+  <div class="onboard-slide" data-slide="1">
+    <div class="emoji">🔎</div>
+    <h3 data-i18n="onb2_title">Vérifie avant de désigner</h3>
+    <p data-i18n="onb2_text">Dans l'onglet "Partie privée", tape le tag d'un joueur présent dans la salle avant que la partie commence. Tu sauras aussitôt s'il est connu comme scammer.</p>
+  </div>
+  <div class="onboard-slide" data-slide="2">
+    <div class="emoji">🤝</div>
+    <h3 data-i18n="onb3_title">Contribue à la communauté</h3>
+    <p data-i18n="onb3_text">Ajoute les scammers que tu croises — ils apparaîtront instantanément chez tous les autres utilisateurs de l'outil.</p>
+  </div>
+  <div class="onboard-slide" data-slide="3">
+    <div class="emoji">📋</div>
+    <h3 data-i18n="onb4_title">Fais l'appel avant de jouer</h3>
+    <p data-i18n="onb4_text">Rentre le tag de chaque joueur de la salle. À la fin, coche ✅ ou ❌ pour chacun, puis valide — les ❌ partent automatiquement en liste noire.</p>
+  </div>
+  <div class="onboard-dots">
+    <span class="active" data-dot="0"></span><span data-dot="1"></span><span data-dot="2"></span><span data-dot="3"></span>
+  </div>
+  <button class="onboard-next" id="onboardNextBtn" data-i18n="onb_next">Suivant</button>
+</div>
+
+<button class="theme-toggle-btn" id="themeToggleBtn" style="display:none;" aria-label="Changer de thème">☀️</button>
+
+<button class="theme-toggle-btn" id="menuToggleBtn" style="left:14px; right:auto; display:none;" aria-label="Menu">☰</button>
+<div class="dropdown-menu" id="dropdownMenu" style="display:none;">
+  <div class="dropdown-user" id="currentUserLabel" style="padding:8px 12px; font-size:11.5px; color:var(--text-dim); border-bottom:1px solid var(--card-line); margin-bottom:6px;"></div>
+  <button class="dropdown-item" id="menuProfileItem"><span data-i18n="menu_profile">Mon profil</span></button>
+  <button class="dropdown-item" id="menuPasswordItem"><span data-i18n="menu_password">Changer le mot de passe</span></button>
+  <div class="dropdown-sep"></div>
+  <button class="dropdown-item" id="menuPrivacyItem"><span data-i18n="menu_privacy">Confidentialité</span></button>
+  <button class="dropdown-item" id="menuTermsItem"><span data-i18n="menu_terms">Conditions d'utilisation</span></button>
+  <div class="dropdown-sep"></div>
+  <button class="dropdown-item" id="menuContactItem"><span data-i18n="menu_contact">Contact / Support</span></button>
+  <button class="dropdown-item" id="menuOnboardItem"><span data-i18n="menu_replay_intro">Revoir l'introduction</span></button>
+  <div class="dropdown-sep"></div>
+  <button class="dropdown-item" id="menuDeleteItem" style="color:var(--red);"><span data-i18n="menu_delete_account">Supprimer mon compte</span></button>
+  <button class="dropdown-item" id="menuLogoutItem"><span data-i18n="auth_logout">Se déconnecter</span></button>
+</div>
+
+<div class="modal-overlay" id="genericModal" style="display:none;">
+  <div class="modal-box modal-box-large">
+    <div class="modal-header">
+      <h3 id="genericModalTitle"></h3>
+      <button class="btn-ghost" id="genericModalClose">✕</button>
+    </div>
+    <div id="genericModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="adminLoginModal" style="display:none;">
+
+  <div class="modal-box">
+    <h3 data-i18n="admin_password_prompt">Mot de passe administrateur :</h3>
+    <input type="password" id="adminPasswordInput" style="width:100%; margin:14px 0; background:#0F1720; color:var(--text); border:1px solid var(--card-line); border-radius:8px; padding:12px; font-size:15px;">
+    <div class="row-btns">
+      <button class="btn-primary" id="adminLoginSubmit" data-i18n="admin_login_btn">Se connecter</button>
+      <button class="btn-ghost" id="adminLoginCancel" data-i18n="admin_cancel_btn">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<div class="admin-overlay" id="adminOverlay" style="display:none;">
+  <div class="admin-overlay-header">
+    <h2 data-i18n="admin_title" style="margin:0;">Panneau administrateur</h2>
+    <button class="btn-ghost" id="adminCloseBtn">✕</button>
+  </div>
+  <div id="adminPanel"></div>
+  <button class="btn-ghost" id="adminLogoutBtn" data-i18n="admin_logout" style="width:100%; margin-top:20px;">Se déconnecter</button>
+</div>
+
+<div class="wrap" style="display:none;">
+
+  <div class="lang-bar">
+    <select id="langSelect" class="lang-select" aria-label="Langue / Language / Язык">
+      <option value="fr">FR — Français</option>
+      <option value="en">EN — English</option>
+      <option value="ru">RU — Русский</option>
+    </select>
+    <div class="live-dot"><i></i><span data-i18n="live_label">EN DIRECT</span> <span style="opacity:0.5;">· v9</span><span id="adminAlertDot" style="display:none; width:5px; height:5px; border-radius:50%; background:var(--red); margin-left:5px;"></span></div>
+  </div>
+
+  <header class="top">
+    <div>
+      <h1 id="appTitle" data-i18n="app_title">Sunday City - Black List Tool</h1>
+      <div class="sub" data-i18n="app_sub">Suivi de salle &amp; liste noire</div>
+    </div>
+  </header>
+
+  <div class="community-banner" id="communityBanner">
+    <span class="n" id="communityN">0</span>
+    <span class="l" data-i18n="community_label">scammers recensés cette semaine grâce à la communauté</span>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-mini"><div class="n" id="statTotalMini">0</div><div class="l" data-i18n="stats_total_label">au total</div></div>
+    <div class="stat-mini"><div class="n" id="statDevicesMini">—</div><div class="l" data-i18n="stats_devices_label">appareils actifs</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="salle"><span data-i18n="tab_salle">Partie privée</span></button>
+    <button class="tab-btn" data-tab="blacklist"><span data-i18n="tab_blacklist">Liste noire</span></button>
+  </div>
+
+  <!-- SALLE -->
+  <div class="panel active" id="panel-salle">
+
+    <div class="card card-featured" id="checkerCard">
+      <h2 data-i18n="checker_title">Vérification instantanée</h2>
+      <p class="hint" data-i18n="checker_hint">Vérifie manuellement, en temps réel, chaque personne présente dans la partie privée : tape son tag (5 ou 6 caractères) et le résultat s'affiche aussitôt.</p>
+      <input type="text" id="checkerInput" data-i18n-placeholder="checker_placeholder" placeholder="Tag du joueur…" autocomplete="off" maxlength="8"
+        style="width:100%; background:#0F1720; color:var(--text); border:1px solid var(--hairline); border-radius:8px; padding:12px; font-size:16px; margin-bottom:4px;">
+      <div id="checkerError" style="display:none; font-size:11.5px; color:var(--red); margin-bottom:6px;"></div>
+      <div id="checkerResult" style="display:none; border-radius:9px; padding:12px 14px; font-size:14px; font-weight:700; text-align:center; margin-top:6px;"></div>
+      <button id="checkerAddBtn" data-i18n="checker_add_btn" style="display:none; width:100%; background:var(--red); color:#fff; margin-top:8px;">Marquer comme scammer</button>
+    </div>
+
+    <button class="history-toggle" id="historyToggleBtn" data-i18n="history_show">Historique des dernières vérifications</button>
+    <div class="history-list" id="historyList"></div>
+
+    <div class="card card-featured" id="roomCard">
+      <h2 data-i18n="room_title">Liste des joueurs de la salle</h2>
+      <p class="hint" data-i18n="room_hint">Rentre le tag de chaque joueur présent avant de commencer. À la fin de la partie, coche ✅ pour ceux qui ont bien joué ou ❌ pour ceux qui ont disparu, puis valide.</p>
+      <div class="quick-add">
+        <input type="text" id="roomTagInput" data-i18n-placeholder="checker_placeholder" placeholder="Tag du joueur…" autocomplete="off" maxlength="8" style="font-family:var(--mono);">
+        <button class="btn-primary" id="roomAddBtn" style="flex:0 0 auto;">+</button>
+      </div>
+      <div class="room-list" id="roomList"></div>
+      <button class="btn-primary" id="roomValidateBtn" data-i18n="room_validate_btn" style="width:100%; margin-top:12px; display:none;">Valider la sélection</button>
+    </div>
+
+    <div class="card session-card">
+      <h2 data-i18n="session_title" style="margin:0 0 12px;">Session de jeu</h2>
+      <div class="session-stats">
+        <div class="session-stat">
+          <div class="session-n" id="sessionTurns">0</div>
+          <div class="session-l" data-i18n="session_turns">Tours joués.</div>
+        </div>
+        <div class="session-stat">
+          <div class="session-n" id="sessionScammers">0</div>
+          <div class="session-l" data-i18n="session_scammers">Scammers détectés.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLACKLIST -->
+  <div class="panel" id="panel-blacklist">
+
+    <div class="card">
+      <h2 data-i18n="quickadd_title">Ajout rapide</h2>
+      <p class="hint" data-i18n="quickadd_hint">Ajoute un scammer connu directement à la liste noire.</p>
+      <div class="quick-add">
+        <input type="text" id="quickName" data-i18n-placeholder="quickadd_name_placeholder" placeholder="Pseudo (optionnel)">
+        <input type="text" id="quickTag" data-i18n-placeholder="quickadd_tag_placeholder" placeholder="Tag" style="max-width:90px;">
+        <button class="btn-primary" id="quickAddBtn" style="flex:0 0 auto;">+</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <h2 data-i18n="blimport_title">Import en masse</h2>
+      <p class="hint" data-i18n="blimport_hint">Colle une liste noire existante (un scammer par ligne, même format que ci-dessus). Si tu n'as que le tag, écris-le seul sur la ligne — le # n'est pas nécessaire.</p>
+      <textarea id="blImportBox" placeholder="Scammer1#1111"></textarea>
+      <div class="row-btns">
+        <button class="btn-primary" id="blImportBtn" data-i18n="blimport_btn">Ajouter à la liste noire</button>
+        <button class="btn-ghost" id="exportBtn" data-i18n="export_btn">Copier la liste</button>
+      </div>
+    </div>
+
+    <div class="pending-line" id="pendingLine" style="display:none;"></div>
+
+    <div class="card dispute-card">
+      <h2 data-i18n="dispute_title">Contester une entrée</h2>
+      <p class="hint" data-i18n="dispute_hint">Tu penses qu'un tag ne devrait plus être blacklisté (erreur, personne a changé) ? Signale-le pour que l'administrateur vérifie.</p>
+      <input type="text" id="disputeTag" data-i18n-placeholder="dispute_tag_placeholder" placeholder="Tag à contester" style="width:100%; margin-bottom:8px; background:#0F1720; color:var(--text); border:1px solid var(--card-line); border-radius:8px; padding:10px; font-size:14px;">
+      <input type="text" id="disputeNote" data-i18n-placeholder="dispute_note_placeholder" placeholder="Pourquoi ? (optionnel)" style="width:100%; margin-bottom:8px; background:#0F1720; color:var(--text); border:1px solid var(--card-line); border-radius:8px; padding:10px; font-size:14px;">
+      <button class="btn-primary" id="disputeBtn" data-i18n="dispute_btn" style="width:100%;">Signaler pour retrait</button>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- état ---------------- */
+
+let blacklist = [];      // {name, tag, norm, date, reason}
+let trustMap = {};        // tag -> nombre de signalements distincts
+let disputes = [];         // contestations en attente (admin)
+let isAdmin = sessionStorage.getItem('tablewatch_admin') === '1';
+const ADMIN_PASSWORD = "sundaycity2026"; // ⚠️ Change ce mot de passe
+
+/* ---------------- thème auto (heure locale) ---------------- */
+
+function applySavedTheme() {
+  const saved = localStorage.getItem('tablewatch_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  updateThemeBtnIcon(saved);
+}
+function updateThemeBtnIcon(theme) {
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+}
+applySavedTheme();
+document.getElementById('themeToggleBtn').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('tablewatch_theme', next);
+  updateThemeBtnIcon(next);
+});
+
+/* ---------------- son / vibration ---------------- */
+
+function alertScammerFound() {
+  try { if (navigator.vibrate) navigator.vibrate([180, 60, 180]); } catch (e) {}
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 740;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch (e) {}
+}
+
+/* ---------------- i18n ---------------- */
+
+const TR = {
+  fr: {
+    live_label: "EN DIRECT",
+    app_title: "Sunday City - Outil Liste Noire",
+    app_sub: "Suivi de salle & liste noire",
+    community_label: "scammers recensés cette semaine grâce à la communauté",
+    stats_total_label: "au total",
+    stats_devices_label: "appareils actifs",
+    tab_salle: "Partie privée",
+    tab_blacklist: "Liste noire",
+    checker_title: "Vérification instantanée",
+    checker_hint: "Vérifie manuellement, en temps réel, chaque personne présente dans la partie privée : tape son tag (5 ou 6 caractères) et le résultat s'affiche aussitôt.",
+    checker_placeholder: "Tag du joueur…",
+    checker_add_btn: "Marquer comme scammer",
+    checker_error: (n) => `Un tag fait 5 ou 6 caractères (${n} saisi${n>1?'s':''})`,
+    checker_scammer_known: "⚠️ SCAMMER CONNU",
+    checker_unknown: "✅ Inconnu de la liste noire",
+    history_show: "Historique des dernières vérifications",
+    history_hide: "Masquer l'historique",
+    history_empty: "Aucune vérification récente.",
+    session_title: "Session de jeu",
+    session_reset: "Réinitialiser",
+    session_turns: "Tours joués",
+    session_scammers: "Scammers détectés",
+    session_reset_toast: "Session réinitialisée",
+    quickadd_title: "Ajout rapide",
+    quickadd_hint: "Ajoute un scammer connu directement à la liste noire.",
+    quickadd_name_placeholder: "Pseudo (optionnel)",
+    quickadd_tag_placeholder: "Tag",
+    reason_options: `<option value="">Raison (optionnel)</option><option value="unpaid">N'a pas payé</option><option value="insult">A insulté</option><option value="cheat">A triché</option><option value="other">Autre…</option>`,
+    reason_custom_placeholder: "Précise la raison…",
+    blimport_title: "Import en masse",
+    blimport_hint: "Colle une liste noire existante (un scammer par ligne, même format que ci-dessus). Si tu n'as que le tag, écris-le seul sur la ligne — le # n'est pas nécessaire.",
+    blimport_btn: "Ajouter à la liste noire",
+    export_btn: "Copier la liste",
+    bl_count_label: "scammers dans la liste noire",
+    dispute_title: "Contester une entrée",
+    dispute_hint: "Tu penses qu'un tag ne devrait plus être blacklisté (erreur, personne a changé) ? Signale-le pour que l'administrateur vérifie.",
+    dispute_tag_placeholder: "Tag à contester",
+    dispute_note_placeholder: "Pourquoi ? (optionnel)",
+    dispute_btn: "Signaler pour retrait",
+    dispute_invalid: "Entre un tag valide (5 ou 6 caractères).",
+    dispute_success: "Signalement envoyé, merci !",
+    admin_link: "Administration",
+    menu_profile: "Mon profil",
+    menu_password: "Changer le mot de passe",
+    menu_privacy: "Confidentialité",
+    menu_terms: "Conditions d'utilisation",
+    menu_contact: "Contact / Support",
+    menu_delete_account: "Supprimer mon compte",
+    menu_save: "Enregistrer",
+    menu_saved_toast: "Modifications enregistrées.",
+    auth_forgot_password: "Mot de passe oublié ?",
+    auth_forgot_need_email: "Entre ton email d'abord.",
+    auth_forgot_sent: "Email de réinitialisation envoyé, vérifie ta boîte mail.",
+    privacy_text: "<h4>Données collectées</h4><p>Nous collectons ton email, ton pseudo, prénom et nom lors de l'inscription, ainsi que les tags que tu ajoutes à la liste noire. Un identifiant technique anonyme est utilisé pour compter les signalements, sans te lier nominativement aux contestations.</p><h4>Utilisation</h4><p>Ces données servent uniquement au fonctionnement de l'outil (authentification, liste noire partagée, statistiques communautaires) et ne sont jamais vendues à des tiers.</p><h4>Conservation</h4><p>Tes données sont conservées tant que ton compte est actif. Tu peux demander leur suppression via \"Supprimer mon compte\".</p><p style=\"opacity:0.6; margin-top:16px;\">Document provisoire — à faire valider par un professionnel avant toute distribution commerciale.</p>",
+    terms_text: "<h4>Objet</h4><p>Cet outil est un service communautaire d'entraide entre joueurs de Sunday City, destiné à signaler les comportements de type \"scam\" observés en partie privée.</p><h4>Responsabilité</h4><p>Les informations partagées par les utilisateurs (tags signalés) reposent sur des témoignages individuels et ne constituent pas une preuve formelle. L'éditeur de l'outil ne garantit pas l'exactitude de chaque entrée et n'est pas responsable des décisions prises sur cette base.</p><h4>Utilisation autorisée</h4><p>Toute utilisation abusive (faux signalements, harcèlement) peut entraîner la suspension du compte.</p><p style=\"opacity:0.6; margin-top:16px;\">Document provisoire — à faire valider par un professionnel avant toute distribution commerciale.</p>",
+    contact_text: "<p>Une question, un problème, ou besoin d'aide ? Écris-nous :</p><p style=\"margin-top:8px;\"><a href=\"mailto:contact@example.com\" style=\"color:var(--gold);\">contact@example.com</a></p><p style=\"opacity:0.6; margin-top:16px;\">⚠️ Adresse à remplacer par la tienne.</p>",
+    delete_account_text: "Cette action envoie une demande de suppression de ton compte et de tes données personnelles à l'administrateur, qui la traitera manuellement. Tes contributions à la liste noire (tags, sans lien avec ton identité) resteront visibles pour préserver l'historique communautaire.",
+    delete_account_confirm_btn: "Confirmer la demande de suppression",
+    delete_account_sent_toast: "Demande envoyée, elle sera traitée sous peu.",
+    menu_replay_intro: "Revoir l'introduction",
+    auth_tab_login: "Connexion",
+    auth_tab_signup: "Créer un compte",
+    auth_google: "Continuer avec Google",
+    auth_apple: "Continuer avec Apple",
+    auth_or: "ou",
+    auth_email: "Email",
+    auth_password: "Mot de passe",
+    auth_password_new: "Mot de passe (6 caractères min.)",
+    auth_username: "Pseudo",
+    auth_first_name: "Prénom",
+    auth_last_name: "Nom",
+    auth_login_btn: "Se connecter",
+    auth_signup_btn: "Créer mon compte",
+    auth_logout: "Se déconnecter",
+    auth_err_missing: "Remplis tous les champs obligatoires.",
+    auth_err_password_short: "Le mot de passe doit faire au moins 6 caractères.",
+    auth_err_generic: "Connexion au service impossible pour le moment.",
+    auth_check_email: "Compte créé ! Vérifie ta boîte mail pour confirmer.",
+    auth_provider_not_configured: "Cette méthode de connexion n'est pas encore activée.",
+    admin_password_prompt: "Mot de passe administrateur :",
+    admin_login_btn: "Se connecter",
+    admin_cancel_btn: "Annuler",
+    admin_wrong_password: "Mot de passe incorrect.",
+    admin_title: "Panneau administrateur",
+    admin_recent_title: "Ajouts récents (24h)",
+    admin_recent_empty: "Aucun ajout dans les dernières 24h.",
+    admin_all_title: "Liste complète (ordre alphabétique)",
+    admin_disputes_title: "Contestations en attente",
+    admin_disputes_empty: "Aucune contestation en attente.",
+    admin_approve: "Approuver (retirer)",
+    admin_reject: "Rejeter",
+    admin_export_btn: "Exporter une sauvegarde",
+    admin_export_done: "Sauvegarde téléchargée",
+    admin_logout: "Se déconnecter",
+    remove_btn: "Retirer",
+    tag_only_suffix: " (tag seul)",
+    meta_added: (date) => `ajouté ${date}`,
+    meta_with_tag_added: (tag, date) => `#${tag} · ajouté ${date}`,
+    meta_unknown_name: (date) => `pseudo inconnu · ajouté ${date}`,
+    trust_badge: (n) => `⚑ ${n}x`,
+    toast_save_error: "Erreur de sauvegarde.",
+    toast_added_generic: (name) => `${name} ajouté`,
+    toast_already_bl: "Déjà en liste noire.",
+    toast_need_name_or_tag: "Entre au moins un pseudo ou un tag.",
+    toast_invalid_tag: "Tag invalide (5 ou 6 caractères requis).",
+    toast_bulk_added: (n) => `${n} ajouté(s)`,
+    toast_bulk_invalid_suffix: (n) => `, ${n} tag(s) invalide(s) ignoré(s)`,
+    toast_list_empty: "Liste vide.",
+    toast_list_copied: "Liste copiée.",
+    toast_copy_failed: "Copie impossible.",
+    toast_seed_imported: (n) => `${n} scammer(s) importé(s)`,
+    toast_seed_ignored_suffix: (n) => `, ${n} ignoré(s)`,
+    toast_sanitize: (n) => `${n} entrée(s) invalide(s) ou en double retirée(s)`,
+    checker_added_toast: (tag) => `#${tag} ajouté à la liste noire`,
+    room_title: "Liste des joueurs de la salle",
+    room_hint: "Rentre le tag de chaque joueur présent avant de commencer. À la fin de la partie, coche ✅ pour ceux qui ont bien joué ou ❌ pour ceux qui ont disparu, puis valide.",
+    room_validate_btn: "Valider la sélection",
+    room_already_added: "Ce tag est déjà dans la liste.",
+    room_validated_toast: (n) => n > 0 ? `Session validée — ${n} scammer${n>1?'s':''} enregistré${n>1?'s':''}` : "Session validée.",
+    toast_removed_from_blacklist: "Retiré de la liste noire.",
+    pending_count: (n) => `⏳ ${n} en attente d'envoi (hors ligne)`,
+    onb1_text: "Un outil communautaire pour repérer les scammers dans les parties privées de Sunday City, alimenté par tous ses utilisateurs.",
+    onb2_title: "Vérifie avant de désigner",
+    onb2_text: "Dans l'onglet \"Partie privée\", tape le tag d'un joueur présent dans la salle avant que la partie commence. Tu sauras aussitôt s'il est connu comme scammer.",
+    onb3_title: "Contribue à la communauté",
+    onb3_text: "Ajoute les scammers que tu croises — ils apparaîtront instantanément chez tous les autres utilisateurs de l'outil.",
+    onb4_title: "Fais l'appel avant de jouer",
+    onb4_text: "Rentre le tag de chaque joueur de la salle. À la fin, coche ✅ ou ❌ pour chacun, puis valide — les ❌ partent automatiquement en liste noire.",
+    onb_next: "Suivant",
+    onb_start: "C'est parti",
+    date_locale: 'fr-BE'
+  },
+  en: {
+    live_label: "LIVE",
+    app_title: "Sunday City - Black List Tool",
+    app_sub: "Room & blacklist tracker",
+    community_label: "scammers reported this week thanks to the community",
+    stats_total_label: "total",
+    stats_devices_label: "active devices",
+    tab_salle: "Private Party",
+    tab_blacklist: "Blacklist",
+    checker_title: "Instant check",
+    checker_hint: "Manually check, in real time, each person present in the private party: type their tag (5 or 6 characters) and the result shows up instantly.",
+    checker_placeholder: "Player tag…",
+    checker_add_btn: "Mark as scammer",
+    checker_error: (n) => `A tag is 5 or 6 characters long (${n} entered)`,
+    checker_scammer_known: "⚠️ KNOWN SCAMMER",
+    checker_unknown: "✅ Not in the blacklist",
+    history_show: "Recent checks history",
+    history_hide: "Hide history",
+    history_empty: "No recent checks.",
+    session_title: "Game session",
+    session_reset: "Reset",
+    session_turns: "Turns played",
+    session_scammers: "Scammers caught",
+    session_reset_toast: "Session reset",
+    quickadd_title: "Quick add",
+    quickadd_hint: "Add a known scammer straight to the blacklist.",
+    quickadd_name_placeholder: "Username (optional)",
+    quickadd_tag_placeholder: "Tag",
+    reason_options: `<option value="">Reason (optional)</option><option value="unpaid">Didn't pay</option><option value="insult">Was abusive</option><option value="cheat">Cheated</option><option value="other">Other…</option>`,
+    reason_custom_placeholder: "Specify the reason…",
+    blimport_title: "Bulk import",
+    blimport_hint: "Paste an existing blacklist (one scammer per line, same format as above). If you only have the tag, write it alone on the line — the # isn't needed.",
+    blimport_btn: "Add to blacklist",
+    export_btn: "Copy list",
+    bl_count_label: "scammers in the blacklist",
+    dispute_title: "Dispute an entry",
+    dispute_hint: "Think a tag shouldn't be blacklisted anymore (mistake, person changed)? Report it so the admin can review.",
+    dispute_tag_placeholder: "Tag to dispute",
+    dispute_note_placeholder: "Why? (optional)",
+    dispute_btn: "Report for removal",
+    dispute_invalid: "Enter a valid tag (5 or 6 characters).",
+    dispute_success: "Report sent, thank you!",
+    admin_link: "Administration",
+    menu_profile: "My profile",
+    menu_password: "Change password",
+    menu_privacy: "Privacy",
+    menu_terms: "Terms of use",
+    menu_contact: "Contact / Support",
+    menu_delete_account: "Delete my account",
+    menu_save: "Save",
+    menu_saved_toast: "Changes saved.",
+    auth_forgot_password: "Forgot password?",
+    auth_forgot_need_email: "Enter your email first.",
+    auth_forgot_sent: "Reset email sent, check your inbox.",
+    privacy_text: "<h4>Data collected</h4><p>We collect your email, username, first and last name at signup, plus the tags you add to the blacklist. An anonymous technical identifier is used to count reports, without linking you by name to disputes.</p><h4>Use</h4><p>This data is only used to run the tool (authentication, shared blacklist, community stats) and is never sold to third parties.</p><h4>Retention</h4><p>Your data is kept as long as your account is active. You can request deletion via \"Delete my account\".</p><p style=\"opacity:0.6; margin-top:16px;\">Draft document — have it reviewed by a professional before any commercial distribution.</p>",
+    terms_text: "<h4>Purpose</h4><p>This tool is a community mutual-aid service for Sunday City players, meant to flag scam-like behaviour seen in private parties.</p><h4>Liability</h4><p>Information shared by users (reported tags) is based on individual accounts and is not formal proof. The tool's operator does not guarantee the accuracy of every entry and is not liable for decisions made based on it.</p><h4>Fair use</h4><p>Abusive use (false reports, harassment) may lead to account suspension.</p><p style=\"opacity:0.6; margin-top:16px;\">Draft document — have it reviewed by a professional before any commercial distribution.</p>",
+    contact_text: "<p>Question, issue, or need help? Write to us:</p><p style=\"margin-top:8px;\"><a href=\"mailto:contact@example.com\" style=\"color:var(--gold);\">contact@example.com</a></p><p style=\"opacity:0.6; margin-top:16px;\">⚠️ Replace with your own address.</p>",
+    delete_account_text: "This sends a request to delete your account and personal data to the administrator, who will process it manually. Your blacklist contributions (tags, unlinked to your identity) will stay visible to preserve the community history.",
+    delete_account_confirm_btn: "Confirm deletion request",
+    delete_account_sent_toast: "Request sent, it will be processed shortly.",
+    menu_replay_intro: "Replay the intro",
+    auth_tab_login: "Log in",
+    auth_tab_signup: "Create account",
+    auth_google: "Continue with Google",
+    auth_apple: "Continue with Apple",
+    auth_or: "or",
+    auth_email: "Email",
+    auth_password: "Password",
+    auth_password_new: "Password (min. 6 characters)",
+    auth_username: "Username",
+    auth_first_name: "First name",
+    auth_last_name: "Last name",
+    auth_login_btn: "Log in",
+    auth_signup_btn: "Create my account",
+    auth_logout: "Log out",
+    auth_err_missing: "Fill in all required fields.",
+    auth_err_password_short: "Password must be at least 6 characters.",
+    auth_err_generic: "Can't reach the service right now.",
+    auth_check_email: "Account created! Check your inbox to confirm.",
+    auth_provider_not_configured: "This sign-in method isn't set up yet.",
+    admin_password_prompt: "Admin password:",
+    admin_login_btn: "Log in",
+    admin_cancel_btn: "Cancel",
+    admin_wrong_password: "Wrong password.",
+    admin_title: "Admin panel",
+    admin_recent_title: "Recent additions (24h)",
+    admin_recent_empty: "No additions in the last 24h.",
+    admin_all_title: "Full list (alphabetical order)",
+    admin_disputes_title: "Pending disputes",
+    admin_disputes_empty: "No pending disputes.",
+    admin_approve: "Approve (remove)",
+    admin_reject: "Reject",
+    admin_export_btn: "Export a backup",
+    admin_export_done: "Backup downloaded",
+    admin_logout: "Log out",
+    remove_btn: "Remove",
+    tag_only_suffix: " (tag only)",
+    meta_added: (date) => `added ${date}`,
+    meta_with_tag_added: (tag, date) => `#${tag} · added ${date}`,
+    meta_unknown_name: (date) => `unknown username · added ${date}`,
+    trust_badge: (n) => `⚑ ${n}x`,
+    toast_save_error: "Save error.",
+    toast_added_generic: (name) => `${name} added`,
+    toast_already_bl: "Already blacklisted.",
+    toast_need_name_or_tag: "Enter at least a username or a tag.",
+    toast_invalid_tag: "Invalid tag (5 or 6 characters required).",
+    toast_bulk_added: (n) => `${n} added`,
+    toast_bulk_invalid_suffix: (n) => `, ${n} invalid tag(s) ignored`,
+    toast_list_empty: "List empty.",
+    toast_list_copied: "List copied.",
+    toast_copy_failed: "Copy failed.",
+    toast_seed_imported: (n) => `${n} scammer(s) imported`,
+    toast_seed_ignored_suffix: (n) => `, ${n} ignored`,
+    toast_sanitize: (n) => `${n} invalid/duplicate entrie(s) removed`,
+    checker_added_toast: (tag) => `#${tag} added to blacklist`,
+    room_title: "Room player list",
+    room_hint: "Enter the tag of each player in the room before starting. At the end of the round, check ✅ for those who played fair, or ❌ for those who disappeared, then confirm.",
+    room_validate_btn: "Confirm selection",
+    room_already_added: "This tag is already in the list.",
+    room_validated_toast: (n) => n > 0 ? `Round confirmed — ${n} scammer${n>1?'s':''} recorded` : "Round confirmed.",
+    toast_removed_from_blacklist: "Removed from blacklist.",
+    pending_count: (n) => `⏳ ${n} pending (offline)`,
+    onb1_text: "A community tool to spot scammers in Sunday City private parties, powered by all its users.",
+    onb2_title: "Check before you pick",
+    onb2_text: "In the \"Private Party\" tab, type the tag of a player in the room before the round starts. You'll instantly know if they're a known scammer.",
+    onb3_title: "Contribute to the community",
+    onb3_text: "Add scammers you run into — they'll instantly show up for every other user of the tool.",
+    onb4_title: "Take roll before you play",
+    onb4_text: "Enter the tag of every player in the room. At the end, check ✅ or ❌ for each one, then confirm — the ❌ ones go straight to the blacklist.",
+    onb_next: "Next",
+    onb_start: "Let's go",
+    date_locale: 'en-GB'
+  },
+  ru: {
+    live_label: "В ЭФИРЕ",
+    app_title: "Sunday City - Инструмент чёрного списка",
+    app_sub: "Отслеживание комнаты и чёрный список",
+    community_label: "мошенников за неделю благодаря сообществу",
+    stats_total_label: "всего",
+    stats_devices_label: "активных устройств",
+    tab_salle: "Приватная вечеринка",
+    tab_blacklist: "Чёрный список",
+    checker_title: "Мгновенная проверка",
+    checker_hint: "Проверяй вручную, в реальном времени, каждого участника закрытой комнаты: введи его тег (5 или 6 символов) — результат появится сразу.",
+    checker_placeholder: "Тег игрока…",
+    checker_add_btn: "Отметить как мошенника",
+    checker_error: (n) => `Тег состоит из 5 или 6 символов (введено: ${n})`,
+    checker_scammer_known: "⚠️ ИЗВЕСТНЫЙ МОШЕННИК",
+    checker_unknown: "✅ Не в чёрном списке",
+    history_show: "История последних проверок",
+    history_hide: "Скрыть историю",
+    history_empty: "Недавних проверок нет.",
+    session_title: "Игровая сессия",
+    session_reset: "Сбросить",
+    session_turns: "Сыграно ходов",
+    session_scammers: "Поймано мошенников",
+    session_reset_toast: "Сессия сброшена",
+    quickadd_title: "Быстрое добавление",
+    quickadd_hint: "Добавь известного мошенника прямо в чёрный список.",
+    quickadd_name_placeholder: "Ник (необязательно)",
+    quickadd_tag_placeholder: "Тег",
+    reason_options: `<option value="">Причина (необязательно)</option><option value="unpaid">Не заплатил</option><option value="insult">Оскорблял</option><option value="cheat">Мошенничал</option><option value="other">Другое…</option>`,
+    reason_custom_placeholder: "Уточни причину…",
+    blimport_title: "Массовый импорт",
+    blimport_hint: "Вставь существующий чёрный список (по одному мошеннику на строку, в том же формате, что и выше). Если есть только тег, напиши его одного на строке — # не обязателен.",
+    blimport_btn: "Добавить в чёрный список",
+    export_btn: "Скопировать список",
+    bl_count_label: "мошенников в чёрном списке",
+    dispute_title: "Оспорить запись",
+    dispute_hint: "Думаешь, тег не должен быть в чёрном списке (ошибка, человек исправился)? Сообщи об этом администратору.",
+    dispute_tag_placeholder: "Тег для оспаривания",
+    dispute_note_placeholder: "Почему? (необязательно)",
+    dispute_btn: "Сообщить об удалении",
+    dispute_invalid: "Введи корректный тег (5 или 6 символов).",
+    dispute_success: "Сообщение отправлено, спасибо!",
+    admin_link: "Администрирование",
+    menu_profile: "Мой профиль",
+    menu_password: "Изменить пароль",
+    menu_privacy: "Конфиденциальность",
+    menu_terms: "Условия использования",
+    menu_contact: "Контакты / Поддержка",
+    menu_delete_account: "Удалить мой аккаунт",
+    menu_save: "Сохранить",
+    menu_saved_toast: "Изменения сохранены.",
+    auth_forgot_password: "Забыл пароль?",
+    auth_forgot_need_email: "Сначала введи email.",
+    auth_forgot_sent: "Письмо для сброса пароля отправлено, проверь почту.",
+    privacy_text: "<h4>Собираемые данные</h4><p>Мы собираем твой email, ник, имя и фамилию при регистрации, а также теги, которые ты добавляешь в чёрный список. Анонимный технический идентификатор используется для подсчёта жалоб, без привязки к твоей личности.</p><h4>Использование</h4><p>Эти данные используются только для работы инструмента (авторизация, общий чёрный список, статистика сообщества) и никогда не продаются третьим лицам.</p><h4>Хранение</h4><p>Твои данные хранятся, пока твой аккаунт активен. Ты можешь запросить удаление через «Удалить мой аккаунт».</p><p style=\"opacity:0.6; margin-top:16px;\">Черновик документа — необходимо согласование с юристом перед коммерческим распространением.</p>",
+    terms_text: "<h4>Назначение</h4><p>Этот инструмент — сервис взаимопомощи сообщества игроков Sunday City для сообщения о мошенническом поведении в приватных вечеринках.</p><h4>Ответственность</h4><p>Информация от пользователей (отмеченные теги) основана на личных свидетельствах и не является формальным доказательством. Оператор инструмента не гарантирует точность каждой записи и не несёт ответственности за решения, принятые на её основе.</p><h4>Правила использования</h4><p>Злоупотребление (ложные жалобы, преследование) может привести к блокировке аккаунта.</p><p style=\"opacity:0.6; margin-top:16px;\">Черновик документа — необходимо согласование с юристом перед коммерческим распространением.</p>",
+    contact_text: "<p>Вопрос, проблема или нужна помощь? Напиши нам:</p><p style=\"margin-top:8px;\"><a href=\"mailto:contact@example.com\" style=\"color:var(--gold);\">contact@example.com</a></p><p style=\"opacity:0.6; margin-top:16px;\">⚠️ Замени на свой адрес.</p>",
+    delete_account_text: "Это действие отправит администратору запрос на удаление твоего аккаунта и личных данных, который обработает его вручную. Твои вклады в чёрный список (теги, без привязки к личности) останутся видимыми для сохранения истории сообщества.",
+    delete_account_confirm_btn: "Подтвердить запрос на удаление",
+    delete_account_sent_toast: "Запрос отправлен, он будет обработан в ближайшее время.",
+    menu_replay_intro: "Повторить введение",
+    auth_tab_login: "Вход",
+    auth_tab_signup: "Создать аккаунт",
+    auth_google: "Продолжить с Google",
+    auth_apple: "Продолжить с Apple",
+    auth_or: "или",
+    auth_email: "Email",
+    auth_password: "Пароль",
+    auth_password_new: "Пароль (мин. 6 символов)",
+    auth_username: "Ник",
+    auth_first_name: "Имя",
+    auth_last_name: "Фамилия",
+    auth_login_btn: "Войти",
+    auth_signup_btn: "Создать аккаунт",
+    auth_logout: "Выйти",
+    auth_err_missing: "Заполни все обязательные поля.",
+    auth_err_password_short: "Пароль должен содержать минимум 6 символов.",
+    auth_err_generic: "Сервис временно недоступен.",
+    auth_check_email: "Аккаунт создан! Проверь почту для подтверждения.",
+    auth_provider_not_configured: "Этот способ входа пока не настроен.",
+    admin_password_prompt: "Пароль администратора:",
+    admin_login_btn: "Войти",
+    admin_cancel_btn: "Отмена",
+    admin_wrong_password: "Неверный пароль.",
+    admin_title: "Панель администратора",
+    admin_recent_title: "Недавние добавления (24ч)",
+    admin_recent_empty: "Нет добавлений за последние 24ч.",
+    admin_all_title: "Полный список (по алфавиту)",
+    admin_disputes_title: "Ожидающие рассмотрения",
+    admin_disputes_empty: "Нет ожидающих жалоб.",
+    admin_approve: "Одобрить (удалить)",
+    admin_reject: "Отклонить",
+    admin_export_btn: "Экспортировать резервную копию",
+    admin_export_done: "Резервная копия скачана",
+    admin_logout: "Выйти",
+    remove_btn: "Удалить",
+    tag_only_suffix: " (только тег)",
+    meta_added: (date) => `добавлено ${date}`,
+    meta_with_tag_added: (tag, date) => `#${tag} · добавлено ${date}`,
+    meta_unknown_name: (date) => `ник неизвестен · добавлено ${date}`,
+    trust_badge: (n) => `⚑ ${n}x`,
+    toast_save_error: "Ошибка сохранения.",
+    toast_added_generic: (name) => `${name} добавлен`,
+    toast_already_bl: "Уже в чёрном списке.",
+    toast_need_name_or_tag: "Введи хотя бы ник или тег.",
+    toast_invalid_tag: "Неверный тег (требуется 5 или 6 символов).",
+    toast_bulk_added: (n) => `Добавлено: ${n}`,
+    toast_bulk_invalid_suffix: (n) => `, проигнорировано неверных тегов: ${n}`,
+    toast_list_empty: "Список пуст.",
+    toast_list_copied: "Список скопирован.",
+    toast_copy_failed: "Не удалось скопировать.",
+    toast_seed_imported: (n) => `Импортировано мошенников: ${n}`,
+    toast_seed_ignored_suffix: (n) => `, проигнорировано: ${n}`,
+    toast_sanitize: (n) => `Удалено недопустимых/повторяющихся записей: ${n}`,
+    checker_added_toast: (tag) => `#${tag} добавлен в чёрный список`,
+    room_title: "Список игроков комнаты",
+    room_hint: "Введи тег каждого игрока в комнате перед началом. В конце раунда отметь ✅ для тех, кто честно сыграл, или ❌ для тех, кто исчез, затем подтверди.",
+    room_validate_btn: "Подтвердить выбор",
+    room_already_added: "Этот тег уже в списке.",
+    room_validated_toast: (n) => n > 0 ? `Раунд подтверждён — записано мошенников: ${n}` : "Раунд подтверждён.",
+    toast_removed_from_blacklist: "Удалён из чёрного списка.",
+    pending_count: (n) => `⏳ В очереди: ${n} (нет сети)`,
+    onb1_text: "Инструмент сообщества для выявления мошенников в приватных вечеринках Sunday City, работающий благодаря всем пользователям.",
+    onb2_title: "Проверяй перед выбором",
+    onb2_text: "Во вкладке «Приватная вечеринка» введи тег игрока, находящегося в комнате, перед началом раунда. Ты сразу узнаешь, известен ли он как мошенник.",
+    onb3_title: "Помоги сообществу",
+    onb3_text: "Добавляй мошенников, с которыми столкнулся — они сразу появятся у всех остальных пользователей инструмента.",
+    onb4_title: "Сделай перекличку перед игрой",
+    onb4_text: "Введи тег каждого игрока в комнате. В конце отметь ✅ или ❌ для каждого, затем подтверди — отмеченные ❌ автоматически попадают в чёрный список.",
+    onb_next: "Далее",
+    onb_start: "Начать",
+    date_locale: 'ru-RU'
+  }
+};
+
+let currentLang = localStorage.getItem('tablewatch_lang') || 'fr';
+if (!TR[currentLang]) currentLang = 'fr';
+
+function t(key, ...args) {
+  const entry = TR[currentLang][key];
+  if (typeof entry === 'function') return entry(...args);
+  return entry;
+}
+
+function applyStaticTranslations() {
+  document.documentElement.lang = currentLang;
+  document.title = t('app_title');
+  const onbTitle1 = document.getElementById('onbTitle1');
+  if (onbTitle1) onbTitle1.textContent = t('app_title');
+  const authTitle = document.getElementById('authAppTitle');
+  if (authTitle) authTitle.textContent = t('app_title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  const historyBtn = document.getElementById('historyToggleBtn');
+  const historyListEl = document.getElementById('historyList');
+  if (historyBtn && historyListEl) {
+    historyBtn.textContent = (historyListEl.style.display === 'flex') ? t('history_hide') : t('history_show');
+  }
+}
+
+document.getElementById('langSelect').value = currentLang;
+document.getElementById('langSelect').addEventListener('change', (e) => {
+  currentLang = e.target.value;
+  localStorage.setItem('tablewatch_lang', currentLang);
+  applyStaticTranslations();
+  renderBlacklist();
+  renderHistory();
+  checkerUpdate();
+  updatePendingLine(loadPendingQueue().length);
+  if (isAdmin) renderAdminPanel();
+});
+
+/* ---------------- onboarding ---------------- */
+
+let onbSlide = 0;
+function showOnboardingIfNeeded() {
+  if (localStorage.getItem('tablewatch_onboarded')) return;
+  document.getElementById('onboardOverlay').style.display = 'flex';
+}
+document.getElementById('onboardNextBtn').addEventListener('click', () => {
+  const slides = document.querySelectorAll('.onboard-slide');
+  const dots = document.querySelectorAll('.onboard-dots span');
+  if (onbSlide < slides.length - 1) {
+    slides[onbSlide].classList.remove('active');
+    dots[onbSlide].classList.remove('active');
+    onbSlide++;
+    slides[onbSlide].classList.add('active');
+    dots[onbSlide].classList.add('active');
+    if (onbSlide === slides.length - 1) document.getElementById('onboardNextBtn').textContent = t('onb_start');
+  } else {
+    localStorage.setItem('tablewatch_onboarded', '1');
+    document.getElementById('onboardOverlay').style.display = 'none';
+  }
+});
+
+/* ---------------- logique de base ---------------- */
+
+function norm(name, tag) {
+  return (name.trim().toLowerCase() + '#' + (tag || '').trim().toLowerCase()).replace(/\s+/g,'');
+}
+function normNoTag(name) {
+  return name.trim().toLowerCase().replace(/\s+/g,'');
+}
+function isValidTagLength(tag) {
+  return tag.length === 5 || tag.length === 6;
+}
+function parseLine(line) {
+  line = line.trim();
+  if (!line) return null;
+  if (line.startsWith('#')) line = line.slice(1).trim();
+  if (!line) return null;
+  let m = line.match(/^(.+?)#\s*([A-Za-z0-9]+)$/);
+  if (m) return { name: m[1].trim(), tag: m[2].trim() };
+  let parts = line.split(/\s+/);
+  if (parts.length > 1 && /^[A-Za-z0-9]+$/.test(parts[parts.length-1]) && parts.length <= 4) {
+    const tag = parts.pop();
+    return { name: parts.join(' '), tag };
+  }
+  if (/^[A-Za-z0-9]+$/.test(line) && isValidTagLength(line)) return { name: '', tag: line };
+  return { name: line, tag: '' };
+}
+function showToast(msg) {
+  const box = document.getElementById('toast');
+  box.textContent = msg;
+  box.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => box.classList.remove('show'), 1600);
+}
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+function isBlacklisted(name, tag) {
+  const n1 = norm(name, tag);
+  const n2 = normNoTag(name);
+  return blacklist.find(b => {
+    if (b.norm === n1) return true;
+    if (!b.name && tag && b.tag && b.tag.toLowerCase() === tag.toLowerCase()) return true;
+    if (tag === '' && b.name && normNoTag(b.name) === n2) return true;
+    return false;
+  });
+}
+async function loadBlacklist() {
+  try { blacklist = JSON.parse(localStorage.getItem('tablewatch_blacklist') || '[]'); }
+  catch (e) { blacklist = []; }
+  renderBlacklist();
+}
+async function saveBlacklist() {
+  try { localStorage.setItem('tablewatch_blacklist', JSON.stringify(blacklist)); }
+  catch (e) { showToast(t('toast_save_error')); }
+}
+
+/* ---------------- identité anonyme de l'appareil ---------------- */
+
+function getDeviceId() {
+  let id = localStorage.getItem('tablewatch_device_id');
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : 'dev-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    localStorage.setItem('tablewatch_device_id', id);
+  }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
+
+/* ---------------- Supabase ---------------- */
+
+const SUPABASE_URL = "https://qwtfpjjbhmmsbthdopfi.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF3dGZwampiaG1tc2J0aGRvcGZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0ODIxOTAsImV4cCI6MjEwNTA1ODE5MH0.68FtSYG3DnpTmuSfaPsVOktrzz6RnCXCwJl1AG4d1UU";
+
+let supa = null;
+if (SUPABASE_URL.startsWith('http') && window.supabase) {
+  try { supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { supa = null; }
+}
+
+/* ---------------- authentification ---------------- */
+
+let currentUser = null; // {id, email, username, first_name, last_name}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.className = 'auth-error';
+  el.style.display = 'block';
+}
+function showAuthSuccess(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.className = 'auth-error auth-success';
+  el.style.display = 'block';
+}
+function hideAuthError() {
+  document.getElementById('authError').style.display = 'none';
+}
+function showAuthGate() {
+  document.getElementById('authOverlay').style.display = 'flex';
+  document.querySelector('.wrap').style.display = 'none';
+  document.getElementById('themeToggleBtn').style.display = 'none';
+  document.getElementById('menuToggleBtn').style.display = 'none';
+}
+function hideAuthGate() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.querySelector('.wrap').style.display = '';
+  document.getElementById('themeToggleBtn').style.display = 'flex';
+  document.getElementById('menuToggleBtn').style.display = 'flex';
+}
+
+document.querySelectorAll('.auth-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const isLogin = tab.dataset.authtab === 'login';
+    document.getElementById('authFormLogin').style.display = isLogin ? 'block' : 'none';
+    document.getElementById('authFormSignup').style.display = isLogin ? 'none' : 'block';
+    hideAuthError();
+  });
+});
+
+async function fetchProfile(userId) {
+  if (!supa) return null;
+  try {
+    const { data } = await supa.from('profiles').select('username, first_name, last_name').eq('id', userId).single();
+    return data;
+  } catch (e) { return null; }
+}
+
+async function handleAuthSession(session) {
+  if (!session || !session.user) {
+    currentUser = null;
+    showAuthGate();
+    return;
+  }
+  const profile = await fetchProfile(session.user.id);
+  currentUser = {
+    id: session.user.id,
+    email: session.user.email,
+    username: profile?.username || (session.user.email ? session.user.email.split('@')[0] : ''),
+    first_name: profile?.first_name || '',
+    last_name: profile?.last_name || ''
+  };
+  hideAuthGate();
+  updateUserBadge();
+  showOnboardingIfNeeded();
+}
+
+function updateUserBadge() {
+  const el = document.getElementById('currentUserLabel');
+  if (el && currentUser) el.textContent = currentUser.username || currentUser.email;
+}
+
+document.getElementById('loginSubmitBtn').addEventListener('click', async () => {
+  hideAuthError();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { showAuthError(t('auth_err_missing')); return; }
+  if (!supa) { showAuthError(t('auth_err_generic')); return; }
+  const { error } = await supa.auth.signInWithPassword({ email, password });
+  if (error) showAuthError(error.message);
+});
+
+document.getElementById('forgotPasswordBtn').addEventListener('click', async () => {
+  hideAuthError();
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email) { showAuthError(t('auth_forgot_need_email')); return; }
+  if (!supa) return;
+  const { error } = await supa.auth.resetPasswordForEmail(email);
+  if (error) showAuthError(error.message);
+  else showAuthSuccess(t('auth_forgot_sent'));
+});
+
+document.getElementById('signupSubmitBtn').addEventListener('click', async () => {
+  hideAuthError();
+  const username = document.getElementById('signupUsername').value.trim();
+  const first_name = document.getElementById('signupFirstName').value.trim();
+  const last_name = document.getElementById('signupLastName').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  if (!username || !email || !password) { showAuthError(t('auth_err_missing')); return; }
+  if (password.length < 6) { showAuthError(t('auth_err_password_short')); return; }
+  if (!supa) { showAuthError(t('auth_err_generic')); return; }
+  const { error } = await supa.auth.signUp({
+    email, password,
+    options: { data: { username, first_name, last_name } }
+  });
+  if (error) showAuthError(error.message);
+  else showAuthSuccess(t('auth_check_email'));
+});
+
+document.getElementById('authGoogleBtn').addEventListener('click', async () => {
+  if (!supa) return;
+  const { error } = await supa.auth.signInWithOAuth({ provider: 'google' });
+  if (error) showAuthError(t('auth_provider_not_configured'));
+});
+async function logoutUser() {
+  if (supa) await supa.auth.signOut();
+  currentUser = null;
+  showAuthGate();
+}
+
+if (supa) {
+  supa.auth.onAuthStateChange((_event, session) => { handleAuthSession(session); });
+  supa.auth.getSession().then(({ data }) => { handleAuthSession(data.session); });
+} else {
+  showAuthGate();
+}
+
+function reportTag(tag) {
+  if (!supa || !tag) return;
+  supa.from('scammer_reports')
+    .upsert([{ tag: tag.trim().toLowerCase(), device_id: DEVICE_ID }], { onConflict: 'tag,device_id', ignoreDuplicates: true })
+    .then(() => {}).catch(() => {});
+}
+
+/* ---------------- file d'attente hors-ligne ---------------- */
+
+function loadPendingQueue() {
+  try { return JSON.parse(localStorage.getItem('tablewatch_pending') || '[]'); }
+  catch (e) { return []; }
+}
+function savePendingQueue(queue) {
+  localStorage.setItem('tablewatch_pending', JSON.stringify(queue));
+  updatePendingLine(queue.length);
+}
+function updatePendingLine(count) {
+  const el = document.getElementById('pendingLine');
+  if (!el) return;
+  if (count > 0) { el.style.display = 'block'; el.textContent = t('pending_count', count); }
+  else { el.style.display = 'none'; }
+}
+function queuePending(entry) {
+  const queue = loadPendingQueue();
+  queue.push(entry);
+  savePendingQueue(queue);
+}
+async function sendToCloud(entry) {
+  if (!supa) return false;
+  try {
+    const tag = entry.tag ? entry.tag.trim().toLowerCase() : null;
+    const row = { name: entry.name || null, tag, reason: entry.reason || null };
+    const { error } = tag
+      ? await supa.from('scammers').upsert([row], { onConflict: 'tag', ignoreDuplicates: true })
+      : await supa.from('scammers').insert([row]);
+    if (error) return false;
+    if (tag) reportTag(tag);
+    return true;
+  } catch (e) { return false; }
+}
+function syncToCloud(entry) {
+  if (!supa) return;
+  sendToCloud(entry).then(ok => { if (!ok) queuePending(entry); });
+}
+async function flushPendingQueue() {
+  if (!supa) return;
+  const queue = loadPendingQueue();
+  if (queue.length === 0) return;
+  const stillPending = [];
+  for (const entry of queue) {
+    const ok = await sendToCloud(entry);
+    if (!ok) stillPending.push(entry);
+  }
+  savePendingQueue(stillPending);
+}
+
+/* ---------------- session de jeu ---------------- */
+
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem('tablewatch_session') || '{"turns":0,"scammers":0}'); }
+  catch (e) { return { turns: 0, scammers: 0 }; }
+}
+function saveSession(session) {
+  localStorage.setItem('tablewatch_session', JSON.stringify(session));
+  renderSession(session);
+}
+function renderSession(session) {
+  const turnsEl = document.getElementById('sessionTurns');
+  const scammersEl = document.getElementById('sessionScammers');
+  if (turnsEl) turnsEl.textContent = session.turns;
+  if (scammersEl) scammersEl.textContent = session.scammers;
+}
+function addSessionScammers(n) {
+  const session = loadSession();
+  session.scammers += n;
+  saveSession(session);
+}
+function addSessionTurns(n) {
+  const session = loadSession();
+  session.turns += n;
+  saveSession(session);
+}
+function resetSession() {
+  saveSession({ turns: 0, scammers: 0 });
+}
+
+/* ---------------- liste des joueurs de la salle ---------------- */
+
+function loadRoomRoster() {
+  try { return JSON.parse(localStorage.getItem('tablewatch_room_roster') || '[]'); }
+  catch (e) { return []; }
+}
+function saveRoomRoster(roster) {
+  localStorage.setItem('tablewatch_room_roster', JSON.stringify(roster));
+  renderRoomList();
+}
+function renderRoomList() {
+  const roster = loadRoomRoster();
+  const list = document.getElementById('roomList');
+  const validateBtn = document.getElementById('roomValidateBtn');
+  list.innerHTML = roster.map((r, i) => `
+    <div class="room-row">
+      <span class="tag">#${escapeHtml(r.tag)}</span>
+      <div class="choices">
+        <button class="room-choice-btn yes${r.choice === 'yes' ? ' active' : ''}" data-i="${i}" data-choice="yes">✅</button>
+        <button class="room-choice-btn no${r.choice === 'no' ? ' active' : ''}" data-i="${i}" data-choice="no">❌</button>
+        <button class="room-remove-btn" data-i="${i}">✕</button>
+      </div>
+    </div>`).join('');
+  validateBtn.style.display = roster.length > 0 ? 'block' : 'none';
+
+  list.querySelectorAll('.room-choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => setRoomChoice(parseInt(btn.dataset.i), btn.dataset.choice));
+  });
+  list.querySelectorAll('.room-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeRoomRow(parseInt(btn.dataset.i)));
+  });
+}
+function setRoomChoice(i, choice) {
+  const roster = loadRoomRoster();
+  const row = roster[i];
+  if (!row) return;
+  const prev = row.choice;
+  if (prev === choice) {
+    // annule la sélection
+    if (prev === 'yes') addSessionTurns(-1);
+    if (prev === 'no') addSessionScammers(-1);
+    row.choice = null;
+  } else {
+    if (prev === 'yes') addSessionTurns(-1);
+    if (prev === 'no') addSessionScammers(-1);
+    row.choice = choice;
+    if (choice === 'yes') addSessionTurns(1);
+    if (choice === 'no') addSessionScammers(1);
+  }
+  saveRoomRoster(roster);
+}
+function removeRoomRow(i) {
+  const roster = loadRoomRoster();
+  const row = roster[i];
+  if (!row) return;
+  if (row.choice === 'yes') addSessionTurns(-1);
+  if (row.choice === 'no') addSessionScammers(-1);
+  roster.splice(i, 1);
+  saveRoomRoster(roster);
+}
+document.getElementById('roomAddBtn').addEventListener('click', () => {
+  const input = document.getElementById('roomTagInput');
+  const tag = input.value.trim().toLowerCase();
+  if (!isValidTagLength(tag)) { showToast(t('toast_invalid_tag')); return; }
+  const roster = loadRoomRoster();
+  if (roster.some(r => r.tag.toLowerCase() === tag)) { showToast(t('room_already_added')); return; }
+  roster.push({ tag, choice: null });
+  saveRoomRoster(roster);
+  input.value = '';
+});
+document.getElementById('roomTagInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('roomAddBtn').click();
+});
+document.getElementById('roomValidateBtn').addEventListener('click', async () => {
+  const roster = loadRoomRoster();
+  const toBan = roster.filter(r => r.choice === 'no');
+  for (const r of toBan) {
+    if (!isBlacklisted('', r.tag)) {
+      blacklist.push({ name: '', tag: r.tag, norm: norm('', r.tag), date: new Date().toISOString(), reason: '' });
+      syncToCloud({ name: '', tag: r.tag });
+    }
+  }
+  if (toBan.length > 0) { await saveBlacklist(); renderBlacklist(); }
+  saveRoomRoster([]);
+  resetSession();
+  showToast(t('room_validated_toast', toBan.length));
+});
+renderRoomList();
+
+/* ---------------- historique des vérifications ---------------- */
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem('tablewatch_check_history') || '[]'); }
+  catch (e) { return []; }
+}
+function pushHistory(tag, known) {
+  const hist = loadHistory();
+  hist.unshift({ tag, known, time: new Date().toISOString() });
+  localStorage.setItem('tablewatch_check_history', JSON.stringify(hist.slice(0, 10)));
+  renderHistory();
+}
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const hist = loadHistory();
+  if (hist.length === 0) {
+    list.innerHTML = `<div class="empty-state" style="padding:16px;">${t('history_empty')}</div>`;
+    return;
+  }
+  list.innerHTML = hist.map(h => {
+    const d = new Date(h.time);
+    const timeStr = isNaN(d) ? '' : d.toLocaleTimeString(t('date_locale'), { hour: '2-digit', minute: '2-digit' });
+    return `<div class="history-row">
+      <span class="tag">#${escapeHtml(h.tag)}</span>
+      <span>${timeStr}</span>
+      <span class="result ${h.known ? 'known' : 'unknown'}">${h.known ? t('checker_scammer_known') : t('checker_unknown')}</span>
+    </div>`;
+  }).join('');
+}
+document.getElementById('historyToggleBtn').addEventListener('click', () => {
+  const list = document.getElementById('historyList');
+  const btn = document.getElementById('historyToggleBtn');
+  const willShow = list.style.display !== 'flex';
+  list.style.display = willShow ? 'flex' : 'none';
+  btn.textContent = willShow ? t('history_hide') : t('history_show');
+  if (willShow) renderHistory();
+});
+
+/* ---------------- rendu de la liste noire (compteur seulement) ---------------- */
+
+function renderBlacklist() {
+  document.getElementById('statTotalMini').textContent = blacklist.length;
+  updateCommunityBanner();
+  if (isAdmin) renderAdminPanel();
+}
+
+function updateCommunityBanner() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = dimanche
+  const diffToMonday = (day === 0 ? 6 : day - 1);
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+  const weekCount = blacklist.filter(b => new Date(b.date).getTime() >= monday.getTime()).length;
+  document.getElementById('communityN').textContent = weekCount;
+}
+
+/* ---------------- ajout rapide ---------------- */
+
+document.getElementById('quickAddBtn').addEventListener('click', async () => {
+  const name = document.getElementById('quickName').value.trim();
+  const tag = document.getElementById('quickTag').value.trim();
+  if (!name && !tag) { showToast(t('toast_need_name_or_tag')); return; }
+  if (tag && !isValidTagLength(tag)) { showToast(t('toast_invalid_tag')); return; }
+  if (isBlacklisted(name, tag)) { showToast(t('toast_already_bl')); return; }
+  blacklist.push({ name, tag, norm: norm(name, tag), date: new Date().toISOString(), reason: '' });
+  syncToCloud({ name, tag });
+  await saveBlacklist();
+  renderBlacklist();
+  addSessionScammers(1);
+  document.getElementById('quickName').value = '';
+  document.getElementById('quickTag').value = '';
+  showToast(t('toast_added_generic', name || '#' + tag));
+});
+
+document.getElementById('blImportBtn').addEventListener('click', async () => {
+  const lines = document.getElementById('blImportBox').value.split('\n');
+  const parsed = lines.map(parseLine).filter(Boolean);
+  let added = 0, invalid = 0;
+  parsed.forEach(p => {
+    if (p.tag && !isValidTagLength(p.tag)) { invalid++; return; }
+    if (!isBlacklisted(p.name, p.tag)) {
+      blacklist.push({ name: p.name, tag: p.tag, norm: norm(p.name, p.tag), date: new Date().toISOString(), reason: '' });
+      syncToCloud({ name: p.name, tag: p.tag });
+      added++;
+    }
+  });
+  await saveBlacklist();
+  renderBlacklist();
+  if (added > 0) addSessionScammers(added);
+  document.getElementById('blImportBox').value = '';
+  showToast(t('toast_bulk_added', added) + (invalid ? t('toast_bulk_invalid_suffix', invalid) : ''));
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const text = blacklist.map(b => b.name + (b.tag ? '#' + b.tag : '')).join('\n');
+  if (!text) { showToast(t('toast_list_empty')); return; }
+  navigator.clipboard.writeText(text).then(() => showToast(t('toast_list_copied'))).catch(() => showToast(t('toast_copy_failed')));
+});
+
+/* ---------------- vérificateur instantané ---------------- */
+
+function checkerUpdate() {
+  const input = document.getElementById('checkerInput');
+  const errBox = document.getElementById('checkerError');
+  const resultBox = document.getElementById('checkerResult');
+  const addBtn = document.getElementById('checkerAddBtn');
+  const tag = input.value.trim();
+  errBox.style.display = 'none';
+  resultBox.style.display = 'none';
+  addBtn.style.display = 'none';
+  if (!tag) return;
+  if (!isValidTagLength(tag)) {
+    errBox.textContent = t('checker_error', tag.length);
+    errBox.style.display = 'block';
+    return;
+  }
+  const match = isBlacklisted('', tag);
+  resultBox.style.display = 'block';
+  if (match) {
+    resultBox.style.background = 'var(--red)';
+    resultBox.style.color = '#fff';
+    resultBox.innerHTML = t('checker_scammer_known') + (match.name ? ' — ' + escapeHtml(match.name) : '');
+  } else {
+    resultBox.style.background = 'rgba(47,193,160,0.16)';
+    resultBox.style.color = 'var(--green)';
+    resultBox.innerHTML = t('checker_unknown');
+    addBtn.style.display = 'block';
+  }
+}
+function checkerUpdateWithSideEffects() {
+  const input = document.getElementById('checkerInput');
+  const tag = input.value.trim();
+  checkerUpdate();
+  if (tag && isValidTagLength(tag)) {
+    const known = !!isBlacklisted('', tag);
+    if (known) alertScammerFound();
+  }
+}
+async function checkerAddScammer() {
+  const input = document.getElementById('checkerInput');
+  const tag = input.value.trim();
+  if (!isValidTagLength(tag)) return;
+  if (isBlacklisted('', tag)) { showToast(t('toast_already_bl')); return; }
+  blacklist.push({ name: '', tag, norm: norm('', tag), date: new Date().toISOString(), reason: '' });
+  syncToCloud({ name: '', tag });
+  await saveBlacklist();
+  renderBlacklist();
+  addSessionScammers(1);
+  input.value = '';
+  checkerUpdate();
+  showToast(t('checker_added_toast', tag));
+}
+let lastCheckedTag = '';
+document.getElementById('checkerInput').addEventListener('input', () => {
+  const input = document.getElementById('checkerInput');
+  const tag = input.value.trim();
+  checkerUpdate();
+  if (tag.length >= 5 && tag !== lastCheckedTag) {
+    lastCheckedTag = tag;
+    if (isValidTagLength(tag)) {
+      const known = !!isBlacklisted('', tag);
+      pushHistory(tag, known);
+      if (known) alertScammerFound();
+    }
+  }
+});
+document.getElementById('checkerInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') checkerAddScammer();
+});
+document.getElementById('checkerAddBtn').addEventListener('click', checkerAddScammer);
+
+renderSession(loadSession());
+
+/* ---------------- contestation ---------------- */
+
+document.getElementById('disputeBtn').addEventListener('click', async () => {
+  const tagInput = document.getElementById('disputeTag');
+  const noteInput = document.getElementById('disputeNote');
+  const tag = tagInput.value.trim().toLowerCase();
+  const note = noteInput.value.trim();
+  if (!isValidTagLength(tag)) { showToast(t('dispute_invalid')); return; }
+  if (!supa) { showToast(t('toast_save_error')); return; }
+  try {
+    await supa.from('scammer_disputes').insert([{ tag, device_id: DEVICE_ID, note: note || null }]);
+    showToast(t('dispute_success'));
+    tagInput.value = '';
+    noteInput.value = '';
+  } catch (e) {
+    showToast(t('toast_save_error'));
+  }
+});
+
+/* ---------------- onglets ---------------- */
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ---------------- administration ---------------- */
+
+/* ---------------- menu déroulant ---------------- */
+
+document.getElementById('menuToggleBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById('dropdownMenu');
+  menu.style.display = (menu.style.display === 'none') ? 'block' : 'none';
+});
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('dropdownMenu');
+  if (menu.style.display === 'block' && !menu.contains(e.target) && e.target.id !== 'menuToggleBtn') {
+    menu.style.display = 'none';
+  }
+});
+
+document.getElementById('menuOnboardItem').addEventListener('click', () => {
+  document.getElementById('dropdownMenu').style.display = 'none';
+  onbSlide = 0;
+  document.querySelectorAll('.onboard-slide').forEach((s, i) => s.classList.toggle('active', i === 0));
+  document.querySelectorAll('.onboard-dots span').forEach((d, i) => d.classList.toggle('active', i === 0));
+  document.getElementById('onboardNextBtn').textContent = t('onb_next');
+  document.getElementById('onboardOverlay').style.display = 'flex';
+});
+
+document.getElementById('menuLogoutItem').addEventListener('click', () => {
+  document.getElementById('dropdownMenu').style.display = 'none';
+  logoutUser();
+});
+
+/* ---------------- modale générique ---------------- */
+
+function openGenericModal(title, bodyHtml) {
+  document.getElementById('dropdownMenu').style.display = 'none';
+  document.getElementById('genericModalTitle').textContent = title;
+  document.getElementById('genericModalBody').innerHTML = bodyHtml;
+  document.getElementById('genericModal').style.display = 'flex';
+}
+document.getElementById('genericModalClose').addEventListener('click', () => {
+  document.getElementById('genericModal').style.display = 'none';
+});
+
+/* ---------------- profil ---------------- */
+
+document.getElementById('menuProfileItem').addEventListener('click', () => {
+  if (!currentUser) return;
+  openGenericModal(t('menu_profile'), `
+    <input type="text" id="profileUsername" class="auth-input" placeholder="${t('auth_username')}" value="${escapeHtml(currentUser.username || '')}">
+    <input type="text" id="profileFirstName" class="auth-input" placeholder="${t('auth_first_name')}" value="${escapeHtml(currentUser.first_name || '')}">
+    <input type="text" id="profileLastName" class="auth-input" placeholder="${t('auth_last_name')}" value="${escapeHtml(currentUser.last_name || '')}">
+    <button class="btn-primary" id="profileSaveBtn" style="width:100%;">${t('menu_save')}</button>
+  `);
+  document.getElementById('profileSaveBtn').addEventListener('click', async () => {
+    const username = document.getElementById('profileUsername').value.trim();
+    const first_name = document.getElementById('profileFirstName').value.trim();
+    const last_name = document.getElementById('profileLastName').value.trim();
+    if (supa && currentUser) {
+      await supa.from('profiles').update({ username, first_name, last_name }).eq('id', currentUser.id);
+      currentUser.username = username; currentUser.first_name = first_name; currentUser.last_name = last_name;
+      updateUserBadge();
+    }
+    document.getElementById('genericModal').style.display = 'none';
+    showToast(t('menu_saved_toast'));
+  });
+});
+
+/* ---------------- mot de passe ---------------- */
+
+document.getElementById('menuPasswordItem').addEventListener('click', () => {
+  openGenericModal(t('menu_password'), `
+    <input type="password" id="newPasswordInput" class="auth-input" placeholder="${t('auth_password_new')}">
+    <button class="btn-primary" id="passwordSaveBtn" style="width:100%;">${t('menu_save')}</button>
+    <div id="passwordModalMsg" class="auth-error" style="display:none;"></div>
+  `);
+  document.getElementById('passwordSaveBtn').addEventListener('click', async () => {
+    const pwd = document.getElementById('newPasswordInput').value;
+    const msg = document.getElementById('passwordModalMsg');
+    if (pwd.length < 6) { msg.textContent = t('auth_err_password_short'); msg.className = 'auth-error'; msg.style.display = 'block'; return; }
+    if (!supa) return;
+    const { error } = await supa.auth.updateUser({ password: pwd });
+    if (error) { msg.textContent = error.message; msg.className = 'auth-error'; msg.style.display = 'block'; }
+    else { msg.textContent = t('menu_saved_toast'); msg.className = 'auth-error auth-success'; msg.style.display = 'block'; }
+  });
+});
+
+/* ---------------- confidentialité / conditions ---------------- */
+
+document.getElementById('menuPrivacyItem').addEventListener('click', () => {
+  openGenericModal(t('menu_privacy'), `<div class="modal-body-text">${t('privacy_text')}</div>`);
+});
+document.getElementById('menuTermsItem').addEventListener('click', () => {
+  openGenericModal(t('menu_terms'), `<div class="modal-body-text">${t('terms_text')}</div>`);
+});
+
+/* ---------------- contact ---------------- */
+
+document.getElementById('menuContactItem').addEventListener('click', () => {
+  openGenericModal(t('menu_contact'), `<div class="modal-body-text">${t('contact_text')}</div>`);
+});
+
+/* ---------------- suppression de compte ---------------- */
+
+document.getElementById('menuDeleteItem').addEventListener('click', () => {
+  openGenericModal(t('menu_delete_account'), `
+    <div class="modal-body-text">${t('delete_account_text')}</div>
+    <button class="btn-primary" id="deleteConfirmBtn" style="width:100%; background:var(--red); margin-top:14px;">${t('delete_account_confirm_btn')}</button>
+  `);
+  document.getElementById('deleteConfirmBtn').addEventListener('click', async () => {
+    if (supa && currentUser) {
+      await supa.from('account_deletion_requests').insert([{ user_id: currentUser.id, email: currentUser.email }]);
+    }
+    document.getElementById('genericModal').style.display = 'none';
+    showToast(t('delete_account_sent_toast'));
+  });
+});
+
+let titleTapCount = 0;
+let titleTapTimer = null;
+document.getElementById('appTitle').addEventListener('click', () => {
+  titleTapCount++;
+  clearTimeout(titleTapTimer);
+  titleTapTimer = setTimeout(() => { titleTapCount = 0; }, 2500);
+  if (titleTapCount >= 7) {
+    titleTapCount = 0;
+    openAdminEntry();
+  }
+});
+
+function openAdminEntry() {
+  if (isAdmin) {
+    openAdminOverlay();
+  } else {
+    document.getElementById('adminLoginModal').style.display = 'flex';
+    document.getElementById('adminPasswordInput').value = '';
+    document.getElementById('adminPasswordInput').focus();
+  }
+}
+
+// Indicateur discret (pas un badge visible) : un point sur le repère de version
+// quand des contestations ont atteint le seuil, repérable seulement si on sait où regarder.
+function updateAdminBadge() {
+  const dot = document.getElementById('adminAlertDot');
+  if (!dot) return;
+  dot.style.display = disputeGroups.length > 0 ? 'inline-block' : 'none';
+}
+
+function openAdminOverlay() {
+  document.getElementById('adminOverlay').style.display = 'block';
+  renderAdminPanel();
+}
+document.getElementById('adminCloseBtn').addEventListener('click', () => {
+  document.getElementById('adminOverlay').style.display = 'none';
+});
+document.getElementById('adminLogoutBtn').addEventListener('click', () => {
+  isAdmin = false;
+  sessionStorage.removeItem('tablewatch_admin');
+  document.getElementById('adminOverlay').style.display = 'none';
+});
+
+document.getElementById('adminLoginCancel').addEventListener('click', () => {
+  document.getElementById('adminLoginModal').style.display = 'none';
+});
+document.getElementById('adminLoginSubmit').addEventListener('click', submitAdminLogin);
+document.getElementById('adminPasswordInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitAdminLogin();
+});
+function submitAdminLogin() {
+  const pwd = document.getElementById('adminPasswordInput').value;
+  if (pwd === ADMIN_PASSWORD) {
+    isAdmin = true;
+    sessionStorage.setItem('tablewatch_admin', '1');
+    document.getElementById('adminLoginModal').style.display = 'none';
+    openAdminOverlay();
+  } else {
+    showToast(t('admin_wrong_password'));
+  }
+}
+
+const DISPUTE_THRESHOLD = 20;
+let disputeGroups = []; // {tag, reporters, notes, ids} — uniquement les tags ayant atteint le seuil
+
+async function fetchDisputes() {
+  if (!supa) return;
+  try {
+    const { data, error } = await supa.from('scammer_disputes').select('id, tag, device_id, note, status, created_at').eq('status', 'pending').order('created_at', { ascending: false });
+    if (error || !data) return;
+    disputes = data;
+    const byTag = {};
+    data.forEach(d => {
+      if (!byTag[d.tag]) byTag[d.tag] = { tag: d.tag, deviceIds: new Set(), notes: [], ids: [] };
+      byTag[d.tag].deviceIds.add(d.device_id);
+      if (d.note) byTag[d.tag].notes.push(d.note);
+      byTag[d.tag].ids.push(d.id);
+    });
+    disputeGroups = Object.values(byTag)
+      .map(g => ({ tag: g.tag, reporters: g.deviceIds.size, notes: g.notes, ids: g.ids }))
+      .filter(g => g.reporters >= DISPUTE_THRESHOLD);
+    updateAdminBadge();
+  } catch (e) {}
+}
+
+function renderAdminPanel() {
+  const panel = document.getElementById('adminPanel');
+  const sorted = [...blacklist].sort((a, b) => {
+    const ka = (a.tag || a.name || '').toLowerCase();
+    const kb = (b.tag || b.name || '').toLowerCase();
+    return ka.localeCompare(kb);
+  });
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  const recent = [...blacklist].filter(b => new Date(b.date).getTime() >= dayAgo)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  function rowHtml(b) {
+    const d = new Date(b.date);
+    const dateStr = isNaN(d) ? '' : d.toLocaleDateString(t('date_locale'), { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const label = b.name ? escapeHtml(b.name) : '#' + escapeHtml(b.tag) + t('tag_only_suffix');
+    const reports = b.tag ? (trustMap[b.tag.toLowerCase()] || 0) : 0;
+    const trustBadge = reports >= 2 ? `<span class="trust-badge${reports >= 3 ? ' strong' : ''}">${t('trust_badge', reports)}</span>` : '';
+    const reasonLine = b.reason ? `<div class="bl-reason">${escapeHtml(b.reason)}</div>` : '';
+    return `<div class="admin-panel-row">
+      <div>
+        <div class="bl-name">${label}${trustBadge}</div>
+        <div class="bl-meta">${dateStr}</div>
+        ${reasonLine}
+      </div>
+      <button class="bl-remove admin-del-btn" data-norm="${escapeHtml(b.norm)}" data-tag="${escapeHtml(b.tag||'')}">${t('remove_btn')}</button>
+    </div>`;
+  }
+
+  let disputesHtml = `<div class="empty-state" style="padding:16px;">${t('admin_disputes_empty')}</div>`;
+  if (disputeGroups.length > 0) {
+    disputesHtml = disputeGroups.map(g => `
+      <div class="admin-panel-row">
+        <div>
+          <div class="bl-name">#${escapeHtml(g.tag)} <span class="trust-badge strong">${g.reporters}/${DISPUTE_THRESHOLD}</span></div>
+          ${g.notes.length ? `<div class="bl-reason">${g.notes.slice(0,3).map(escapeHtml).join(' · ')}</div>` : ''}
+        </div>
+        <div class="admin-dispute-actions">
+          <button class="btn-primary admin-approve-btn" data-ids="${g.ids.join(',')}" data-tag="${escapeHtml(g.tag)}">${t('admin_approve')}</button>
+          <button class="btn-ghost admin-reject-btn" data-ids="${g.ids.join(',')}">${t('admin_reject')}</button>
+        </div>
+      </div>`).join('');
+  }
+
+  panel.innerHTML = `
+    <h2 class="admin-section-title" style="margin-top:6px;">${t('admin_title')}</h2>
+    <button class="btn-ghost" id="adminExportBtn" style="width:100%; margin-bottom:14px;">${t('admin_export_btn')}</button>
+
+    <div class="admin-section-title">${t('admin_disputes_title')}</div>
+    ${disputesHtml}
+
+    <button class="history-toggle" id="adminRecentToggle">${t('admin_recent_title')} (${recent.length})</button>
+    <div class="bl-list" id="adminRecentList" style="display:none; margin-bottom:14px;">
+      ${recent.length ? recent.map(rowHtml).join('') : `<div class="empty-state" style="padding:16px;">${t('admin_recent_empty')}</div>`}
+    </div>
+
+    <button class="history-toggle" id="adminAllToggle">${t('admin_all_title')} (${sorted.length})</button>
+    <div class="bl-list" id="adminAllList" style="display:none;">
+      ${sorted.map(rowHtml).join('')}
+    </div>
+  `;
+
+  const allToggle = document.getElementById('adminAllToggle');
+  const allList = document.getElementById('adminAllList');
+  if (allToggle) allToggle.addEventListener('click', () => {
+    allList.style.display = (allList.style.display === 'none') ? 'flex' : 'none';
+  });
+
+  const recentToggle = document.getElementById('adminRecentToggle');
+  const recentList = document.getElementById('adminRecentList');
+  if (recentToggle) recentToggle.addEventListener('click', () => {
+    recentList.style.display = (recentList.style.display === 'none') ? 'flex' : 'none';
+  });
+
+  panel.querySelectorAll('.admin-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const n = btn.dataset.norm;
+      const tag = btn.dataset.tag;
+      blacklist = blacklist.filter(b => b.norm !== n);
+      await saveBlacklist();
+      renderBlacklist();
+      if (supa && tag) supa.from('scammers').delete().eq('tag', tag).then(() => {}).catch(() => {});
+      showToast(t('toast_removed_from_blacklist'));
+    });
+  });
+  panel.querySelectorAll('.admin-approve-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ids = btn.dataset.ids.split(',');
+      const tag = btn.dataset.tag;
+      blacklist = blacklist.filter(b => b.tag !== tag);
+      await saveBlacklist();
+      renderBlacklist();
+      if (supa) {
+        await supa.from('scammers').delete().eq('tag', tag);
+        await supa.from('scammer_disputes').update({ status: 'approved' }).in('id', ids);
+      }
+      await fetchDisputes();
+      renderAdminPanel();
+      showToast(t('toast_removed_from_blacklist'));
+    });
+  });
+  panel.querySelectorAll('.admin-reject-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ids = btn.dataset.ids.split(',');
+      if (supa) await supa.from('scammer_disputes').update({ status: 'rejected' }).in('id', ids);
+      await fetchDisputes();
+      renderAdminPanel();
+    });
+  });
+  const exportBtn = document.getElementById('adminExportBtn');
+  if (exportBtn) exportBtn.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(blacklist, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'table-watch-backup-' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(t('admin_export_done'));
+  });
+}
+
+if (isAdmin) { document.getElementById('adminOverlay').style.display = 'block'; }
+
+/* ---------------- statistique du nombre d'appareils ---------------- */
+
+async function fetchDeviceStats() {
+  if (!supa) return;
+  try {
+    const { data, error } = await supa.from('device_stats').select('devices').single();
+    if (!error && data) document.getElementById('statDevicesMini').textContent = data.devices;
+  } catch (e) {}
+}
+
+/* ---------------- liste de départ + nettoyage + synchro cloud ---------------- */
+
+const SEED_TEXT = `#12duks
+#15r5v9
+#rdOei
+#14xedw
+#kzfOd
+#g4xrf
+#w83qc
+#xmyb1
+#z2sew
+#108tu5
+#a5|5d
+#n568s
+#qbelv
+#1a6m6l
+#17ls0e
+#982t6
+#7ks9t
+#auahu
+#xrzc7
+#k9ysa
+#Yg30j
+#Fh73h
+#81346
+#Zjxv2
+#Cu7h9
+#Howfz
+#Iaz4c5
+#1bmbi6
+#Xkjfl
+#Ywf3t
+#Mzxpz
+#13nbcq
+#gqse8
+#Fji9t
+#I5rcqp
+#C6h2u
+#Ryklo
+#K55qp
+#C6hzu
+#13vreq
+#Grlaq
+#acypp
+#18bn0a
+#11sv87
+#u1fuf
+#7s9gf
+#144zo8
+#jexdw
+#u68o2
+#swj36
+#fn8ez
+#tthd4
+#116ute
+#11gm87
+#cis7b
+#w2abh
+#17go2z
+#76cwx
+#1b4zwn
+#102qqj
+#7fz32
+#vscty
+#m71wl
+#jaoct
+#8ad2z
+#eetw1
+#fjzds
+#ovifx
+#1049uy
+#a8uiz
+#z3u74
+#kh8jd
+#qo4x7
+#dpoe4
+#iiapv
+#zo9h3
+#jz1mp
+#17ic7g
+#qvjfs
+#b7vo4
+#15rcqp
+#l13ca
+#79cwx
+#fdpuc
+#vwclp
+#x2yyz
+#kzf0d
+#rlkuz
+#15lcg2
+#k8o2d
+#ub5vl
+#82g5w
+#17rsf7
+#10ep4d
+#lhjf8
+#xsh2r
+#8l346
+#utbuz
+#113vu5
+#y6eqc
+#1ae023
+#svrt1
+#bi3z5
+#he1un
+#agjdp
+#hs8cx
+#kwwb1
+#15egu9
+#dt5pa
+#eejcl
+#17avya
+#06b85
+#jyqpn
+#e5dx3
+#8qfx1
+#ewecu
+#gsqp0
+#8uzcw
+#yasa8
+#phcex
+#16bbr7
+#cs5gp
+#xgox7
+#su2tj
+#fkidh
+#p1q8o
+#83oi1
+#oz2ks
+#w1g9u
+#ctrwh
+#t5ss3
+#16l3nw
+#146gyj
+#w2qff
+#e0ucj
+#15u2td
+#r4emw
+#rip5c
+#yco6a
+#191nxf
+#186oxj
+#qxitq
+#vn7wb
+#125cqc
+#d5tmp
+#fjktr
+#7evwt
+#13ex9i
+#1455mw
+#f1cjb
+#dgg6e
+#Rtmz7
+#104q83
+#10fj80
+#a5l5d
+#ny3a1
+#r8r25
+#1b6j3v
+#18wbzm
+#rsedk
+#ziecp
+#10epd4
+#u8p0t
+#f7fba
+#15t5d5
+#j1304
+#107c0b
+#fd3n0
+#ippdr
+#v14gw
+#f4sr7
+#yxb0r
+#6ifvc
+#r08fa
+#bynfu
+#pjjhq
+#gg6qv
+#17o1h5
+#p8pvu
+#lmqci
+#11eucs
+#62jei
+#m24ku
+#ivcq6
+#qqn3z
+#c6hu2
+#ewv1d
+#jdvqf
+#xgaaz
+#ukfrn
+#uehlk
+#144zop
+#jd9pp
+#pcb79
+#nnc0h
+#14dl9z
+#Rt95i
+#Y1cy9
+#Ero53
+#x1eg9
+#gs85n
+#142pdw
+#ln2y1
+#v1063
+#1asdbc
+#KBZ1H
+#XN353
+#WSDVP
+#DI9EC
+#1btkui
+#wnnd2
+#1b4vac
+#72jh0
+#pwfeo
+#tftov
+#1bjskj
+#rd0ei
+#Ljbai
+#Bfhqs
+#Zpjdb
+#Ggdud
+#1c2gfd
+#8tcwk
+#A7i26
+#G83zz
+#Gv0tm
+#1bsv1e
+#13w5gm
+#1387o7
+#1aqrso
+#Og7jo
+#Z07iz
+#o2bp0
+#19spkj
+#11jfwu
+#156yk6
+#Rd0ei
+#O0s56`;
+
+async function seedIfNeeded() {
+  if (localStorage.getItem('tablewatch_seeded_v2')) return;
+  const lines = SEED_TEXT.split('\n');
+  const parsed = lines.map(parseLine).filter(Boolean);
+  let added = 0, invalid = 0;
+  parsed.forEach(p => {
+    if (p.tag && !isValidTagLength(p.tag)) { invalid++; return; }
+    if (!isBlacklisted(p.name, p.tag)) {
+      blacklist.push({ name: p.name, tag: p.tag, norm: norm(p.name, p.tag), date: new Date().toISOString(), reason: '' });
+      added++;
+    }
+  });
+  if (added > 0) await saveBlacklist();
+  localStorage.setItem('tablewatch_seeded_v2', '1');
+  renderBlacklist();
+}
+
+async function sanitizeBlacklist() {
+  const seen = new Map();
+  let removed = 0;
+  for (const b of blacklist) {
+    if (b.tag && !isValidTagLength(b.tag)) { removed++; continue; }
+    if (!b.tag && !b.name) { removed++; continue; }
+    const key = b.tag ? 'tag:' + b.tag.toLowerCase() : 'name:' + normNoTag(b.name);
+    if (seen.has(key)) { removed++; continue; }
+    seen.set(key, b);
+  }
+  if (removed > 0) {
+    blacklist = Array.from(seen.values());
+    await saveBlacklist();
+    renderBlacklist();
+  }
+}
+
+async function fetchTrustCounts() {
+  if (!supa) return;
+  try {
+    const { data, error } = await supa.from('scammer_report_counts').select('tag, reports');
+    if (error || !data) return;
+    const map = {};
+    data.forEach(row => { if (row.tag) map[row.tag.toLowerCase()] = row.reports; });
+    trustMap = map;
+  } catch (e) {}
+}
+
+async function fetchCloudBlacklist() {
+  if (!supa) return { ok: false, diff: 0 };
+  try {
+    const { data, error } = await supa.from('scammers').select('name, tag, reason, created_at');
+    if (error || !data) return { ok: false, diff: 0 };
+    const before = blacklist.length;
+    blacklist = data
+      .filter(row => row.name || row.tag)
+      .map(row => ({ name: row.name || '', tag: row.tag || '', norm: norm(row.name || '', row.tag || ''), date: row.created_at || new Date().toISOString(), reason: row.reason || '' }));
+    await fetchTrustCounts();
+    await fetchDeviceStats();
+    await fetchDisputes();
+    await saveBlacklist();
+    renderBlacklist();
+    if (isAdmin) renderAdminPanel();
+    return { ok: true, diff: blacklist.length - before };
+  } catch (e) {
+    return { ok: false, diff: 0 };
+  }
+}
+
+updatePendingLine(loadPendingQueue().length);
+window.addEventListener('online', flushPendingQueue);
+
+applyStaticTranslations();
+
+loadBlacklist().then(async () => {
+  await seedIfNeeded();
+  await sanitizeBlacklist();
+  await flushPendingQueue();
+  await fetchCloudBlacklist();
+  renderHistory();
+});
+</script>
+</body>
+</html>
