@@ -1,0 +1,16 @@
+# Services locaux pour le développement : PostgreSQL + Redis.
+# L'auth et le stockage restent sur un projet Supabase (gratuit) ou `supabase start`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: licensio
+      POSTGRES_PASSWORD: licensio
+      POSTGRES_DB: licensio
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+volumes:
+  pgdata:
