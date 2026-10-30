@@ -14,7 +14,7 @@ export function ComplianceBadge({ status, size = "sm" }: { status: ComplianceSta
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full font-medium ring-1 ring-inset",
+        "inline-flex w-fit shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full font-medium ring-1 ring-inset",
         size === "lg" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs",
         s.pill,
       )}
