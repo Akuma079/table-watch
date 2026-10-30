@@ -78,7 +78,7 @@ export function AssetEditor({ onChange, startWithRow = true }: { onChange: (asse
       </details>
 
       {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+        <div className="relative overflow-x-auto rounded-xl border border-neutral-200 bg-white">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-neutral-200 text-xs text-neutral-500">
               <tr>

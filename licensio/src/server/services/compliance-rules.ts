@@ -27,8 +27,13 @@ export type AuditLicense = {
   licenseKey: string | null;
   expiresAt: Date | null;
   revokedAt: Date | null;
+  // Licence qui doit rester valable tant que la vidéo est exploitée (abonnement, licence à durée).
+  mustStayActive: boolean;
   documentCount: number;
 };
+
+// Validation manuelle d'une licence à utilité restreinte, propre à une licence donnée.
+export type RestrictedApproval = { licenseId: string; at: Date; by: string | null };
 
 export type AuditAsset = {
   id: string;
@@ -37,6 +42,7 @@ export type AuditAsset = {
   sourceUrl: string | null;
   licenseId: string | null;
   matchMethod: MatchMethod | null;
+  restrictedApproval?: RestrictedApproval | null;
 };
 
 export type AuditProject = { usage: ProjectUsage; publishedAt: Date | null };
@@ -101,7 +107,12 @@ function sameSource(asset: AuditAsset, license: AuditLicense) {
 }
 
 // Vérifie une licence donnée pour une ressource et un projet.
-export function evaluateLicense(license: AuditLicense, project: AuditProject, now: Date): Finding[] {
+export function evaluateLicense(
+  license: AuditLicense,
+  project: AuditProject,
+  now: Date,
+  approval?: RestrictedApproval | null,
+): Finding[] {
   const today = startOfUtcDay(now);
   const findings: Finding[] = [];
   const label = `${LICENSE_TYPE_LABELS[license.licenseType].toLowerCase()} ${platformName(license)}`;
@@ -111,16 +122,20 @@ export function evaluateLicense(license: AuditLicense, project: AuditProject, no
   }
 
   // Date de référence : la diffusion si elle est connue (une licence valable au moment de
-  // la publication couvre en général la vidéo), sinon aujourd'hui.
-  const reference = project.publishedAt ? startOfUtcDay(project.publishedAt) : today;
+  // la publication couvre en général la vidéo), sinon aujourd'hui. Une licence qui doit
+  // rester active pendant l'exploitation est toujours jugée à la date du jour.
+  const published = project.publishedAt ? startOfUtcDay(project.publishedAt) : null;
+  const reference = !published || (license.mustStayActive && published < today) ? today : published;
   const alreadyPublished = reference < today;
   if (license.expiresAt && license.expiresAt < reference) {
     findings.push({
       severity: "ERROR",
       code: "LICENSE_EXPIRED",
-      message: project.publishedAt
+      message: reference === published
         ? `La licence expire le ${dayFormat.format(license.expiresAt)}, avant la diffusion du ${dayFormat.format(reference)}.`
-        : `La licence a expiré le ${dayFormat.format(license.expiresAt)}.`,
+        : license.mustStayActive && published && published < today
+          ? `La licence a expiré le ${dayFormat.format(license.expiresAt)} alors qu'elle doit rester active pendant l'exploitation de la vidéo.`
+          : `La licence a expiré le ${dayFormat.format(license.expiresAt)}.`,
     });
   } else if (license.expiresAt && !alreadyPublished) {
     const days = Math.round((license.expiresAt.getTime() - today.getTime()) / DAY_MS);
@@ -142,7 +157,7 @@ export function evaluateLicense(license: AuditLicense, project: AuditProject, no
           ? "Utilisation commerciale détectée mais la licence est strictement personnelle."
           : "Diffusion TV, cinéma ou publicité payante : une licence étendue est requise.",
     });
-  } else if (license.licenseType === "RESTRICTED" && project.usage !== "PERSONAL") {
+  } else if (license.licenseType === "RESTRICTED" && project.usage !== "PERSONAL" && approval?.licenseId !== license.id) {
     findings.push({
       severity: "WARNING",
       code: "LICENSE_RESTRICTED",
@@ -162,10 +177,15 @@ export function evaluateLicense(license: AuditLicense, project: AuditProject, no
     findings.push({
       severity: "OK",
       code: "LICENSED",
-      message: `Couverte par la licence ${label}${license.licenseKey ? ` n° ${license.licenseKey}` : ""}.`,
+      message: `Couverte par la licence ${label}${license.licenseKey ? ` n° ${license.licenseKey}` : ""}.${approvalNote(license, approval)}`,
     });
   }
   return findings;
+}
+
+function approvalNote(license: AuditLicense, approval?: RestrictedApproval | null) {
+  if (license.licenseType !== "RESTRICTED" || approval?.licenseId !== license.id) return "";
+  return ` Conditions vérifiées pour ce projet${approval.by ? ` par ${approval.by}` : ""} le ${dayFormat.format(approval.at)}.`;
 }
 
 type Candidate = { license: AuditLicense; findings: Finding[]; matchMethod: MatchMethod };
@@ -189,7 +209,7 @@ export function evaluateAsset(
   if (asset.matchMethod === "MANUAL" && asset.licenseId) {
     const license = licenses.find((l) => l.id === asset.licenseId);
     if (license) {
-      const findings = evaluateLicense(license, project, now);
+      const findings = evaluateLicense(license, project, now, asset.restrictedApproval);
       return { assetId: asset.id, licenseId: license.id, matchMethod: "MANUAL", severity: worst(findings), findings };
     }
   }
@@ -201,7 +221,7 @@ export function evaluateAsset(
 
   let best: Candidate | null = null;
   for (const license of pool) {
-    const findings = evaluateLicense(license, project, now);
+    const findings = evaluateLicense(license, project, now, asset.restrictedApproval);
     if (asset.platform && license.platform !== asset.platform) {
       findings.unshift({
         severity: "WARNING",
@@ -228,6 +248,65 @@ export function evaluateAsset(
     severity: worst(best.findings),
     findings: best.findings,
   };
+}
+
+// Licences au titre proche d'une ressource sans correspondance (« Golden Hour Remix » ↔
+// « Golden Hour »), à proposer à l'utilisateur, qui valide l'association d'un clic.
+export const SUGGESTION_THRESHOLD = 0.5;
+
+function tokens(name: string) {
+  return name.split(" ").filter((t) => t.length > 1 || /\d/.test(t));
+}
+
+// Similarité de Dice sur les bigrammes de caractères, pour tolérer les fautes de frappe.
+function bigrams(s: string) {
+  const compact = s.replace(/ /g, "");
+  const out = new Map<string, number>();
+  for (let i = 0; i < compact.length - 1; i++) {
+    const g = compact.slice(i, i + 2);
+    out.set(g, (out.get(g) ?? 0) + 1);
+  }
+  return out;
+}
+
+function dice(a: string, b: string) {
+  const ga = bigrams(a);
+  const gb = bigrams(b);
+  const total = [...ga.values(), ...gb.values()].reduce((x, y) => x + y, 0);
+  if (total === 0) return 0;
+  let common = 0;
+  for (const [g, n] of ga) common += Math.min(n, gb.get(g) ?? 0);
+  return (2 * common) / total;
+}
+
+export function titleSimilarity(a: string, b: string) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const ta = tokens(a);
+  const tb = tokens(b);
+  const setB = new Set(tb);
+  const shared = ta.filter((t) => setB.has(t)).length;
+  // Un titre entièrement contenu dans l'autre (« golden hour » dans « golden hour extended mix »).
+  const containment = Math.min(ta.length, tb.length) > 0 ? shared / Math.min(ta.length, tb.length) : 0;
+  const overlap = shared / Math.max(ta.length, tb.length, 1);
+  return Math.max(dice(a, b), containment * 0.6 + overlap * 0.4);
+}
+
+export function suggestLicenses<L extends Pick<AuditLicense, "id" | "normalizedName" | "author" | "assetName">>(
+  assetNormalizedName: string,
+  licenses: L[],
+  max = 3,
+): { license: L; score: number }[] {
+  return licenses
+    .map((license) => {
+      const keys = [license.normalizedName];
+      if (license.author) keys.push(normalizeAssetName(`${license.assetName} ${license.author}`));
+      const score = Math.max(...keys.map((k) => titleSimilarity(assetNormalizedName, k)));
+      return { license, score };
+    })
+    .filter((s) => s.score >= SUGGESTION_THRESHOLD && s.score < 1)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max);
 }
 
 export function auditProject(

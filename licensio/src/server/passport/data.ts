@@ -19,6 +19,8 @@ export function passportUrl(token: string) {
 
 export type PassportAsset = {
   name: string;
+  // Titre de la licence quand il diffère du titre déclaré (version, remix, faute de frappe).
+  licenseName: string | null;
   author: string | null;
   assetType: AssetType;
   platform: string | null;
@@ -63,10 +65,13 @@ export async function loadPassport(token: string): Promise<Passport | null> {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
   const head = await prisma.project.findUnique({
     where: { passportToken: token },
-    select: { id: true, workspaceId: true, passportEnabled: true, lastAuditAt: true, workspace: { select: { plan: true } } },
+    select: { id: true, workspaceId: true, passportEnabled: true, lastAuditAt: true, workspace: { select: { plan: true, passportGraceUntil: true } } },
   });
-  // Lien désactivé, ou espace repassé à un plan sans passeport : le lien ne répond plus.
-  if (!head?.passportEnabled || !hasFeature(head.workspace.plan, "passport")) return null;
+  if (!head?.passportEnabled) return null;
+  // Espace repassé à un forfait sans passeport : le lien reste consultable pendant le délai
+  // de grâce (30 jours), puis ne répond plus.
+  const grace = head.workspace.passportGraceUntil;
+  if (!hasFeature(head.workspace.plan, "passport") && !(grace && grace > new Date())) return null;
 
   // Un passeport ne doit jamais présenter une licence expirée depuis comme valide.
   if (auditIsStale(head.lastAuditAt)) await checkCompliance(head.id, head.workspaceId);
@@ -80,6 +85,8 @@ export async function loadPassport(token: string): Promise<Passport | null> {
         include: {
           license: {
             select: {
+              assetName: true,
+              normalizedName: true,
               platform: true,
               platformOther: true,
               licenseType: true,
@@ -108,6 +115,7 @@ export async function loadPassport(token: string): Promise<Passport | null> {
     const l = a.license;
     return {
       name: a.assetName,
+      licenseName: l && l.normalizedName !== a.normalizedName ? l.assetName : null,
       author: a.author,
       assetType: a.assetType,
       platform: l ? (l.platform === "OTHER" ? l.platformOther || "Autre" : PLATFORM_LABELS[l.platform]) : a.platform ? PLATFORM_LABELS[a.platform] : null,

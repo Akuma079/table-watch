@@ -228,6 +228,32 @@ export async function linkAssetLicense(formData: FormData) {
   refresh(asset.projectId);
 }
 
+// Licence à utilité restreinte : un membre confirme que ses conditions couvrent ce projet.
+// La validation porte sur la licence associée à ce moment-là, et sur elle seule.
+export async function setRestrictedApproval(formData: FormData) {
+  const ctx = await requireWorkspaceRole("MEMBER");
+  const asset = await prisma.projectAsset.findFirst({
+    where: { id: str(formData, "assetId"), project: { workspaceId: ctx.workspace.id } },
+    select: { id: true, projectId: true, license: { select: { id: true, licenseType: true } } },
+  });
+  if (!asset) return;
+
+  if (str(formData, "approve") === "1") {
+    if (asset.license?.licenseType !== "RESTRICTED") return;
+    await prisma.projectAsset.update({
+      where: { id: asset.id },
+      data: { restrictedApprovedLicenseId: asset.license.id, restrictedApprovedAt: new Date(), restrictedApprovedById: ctx.user.id },
+    });
+  } else {
+    await prisma.projectAsset.update({
+      where: { id: asset.id },
+      data: { restrictedApprovedLicenseId: null, restrictedApprovedAt: null, restrictedApprovedById: null },
+    });
+  }
+  await checkCompliance(asset.projectId, ctx.workspace.id);
+  refresh(asset.projectId);
+}
+
 export async function runProjectAudit(formData: FormData) {
   const ctx = await requireWorkspaceRole("VIEWER");
   const projectId = str(formData, "projectId");
@@ -260,7 +286,7 @@ export async function enablePassport(projectId: string): Promise<PassportLinkRes
   });
   if (!project) return { error: "Projet introuvable." };
   if (!hasFeature(ctx.workspace.plan, "passport")) {
-    return { error: "Le Passeport de Droits est inclus dans le plan Agence." };
+    return { error: "Le Passeport de Droits est inclus dans les forfaits Creator et Agence." };
   }
 
   const token = project.passportToken ?? newPassportToken();

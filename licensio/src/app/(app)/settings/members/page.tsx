@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { dateFormat, ROLE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
 import { removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
-import { hasFeature } from "@/lib/plans";
+import { hasFeature, PLANS } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/billing/UpgradeNotice";
 import { InviteForm } from "@/components/workspace/InviteForm";
 import { Alert } from "@/components/ui/Alert";
@@ -43,8 +43,8 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
         {hasFeature(ctx.workspace.plan, "multiUser") ? (
           <InviteForm canInviteAdmin={isOwner} />
         ) : (
-          <UpgradeNotice title="Travaillez en équipe avec le plan Agence" canManage>
-            Le plan Creator est réservé à un seul utilisateur. Le plan Agence permet d&apos;inviter vos monteurs, chefs de projet et
+          <UpgradeNotice title="Travaillez en équipe avec le plan Agence" canManage planName="Agence">
+            Le plan {PLANS[ctx.workspace.plan].name} est réservé à un seul utilisateur. Le plan Agence permet d&apos;inviter vos monteurs, chefs de projet et
             clients (en lecture seule), sans surcoût par personne.
           </UpgradeNotice>
         )}
@@ -112,7 +112,8 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                 <div className="min-w-0">
                   <p className="truncate font-medium">{inv.email}</p>
                   <p className="text-sm text-neutral-500">
-                    {ROLE_LABELS[inv.role]} · expire le {dateFormat.format(inv.expiresAt)}
+                    {ROLE_LABELS[inv.role]} · {inv.emailSentAt ? "email envoyé" : "lien à transmettre"} · expire le{" "}
+                    {dateFormat.format(inv.expiresAt)}
                   </p>
                 </div>
                 <form action={revokeInvitation}>

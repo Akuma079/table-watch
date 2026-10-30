@@ -10,7 +10,7 @@ import {
   LICENSE_TYPE_LABELS,
   PLATFORM_LABELS,
 } from "@/lib/labels";
-import { createLicense } from "@/server/actions/licenses";
+import { createLicense, updateLicense } from "@/server/actions/licenses";
 import { initialFormState } from "@/server/actions/types";
 import { Alert } from "@/components/ui/Alert";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -39,10 +39,18 @@ function SelectField({
   );
 }
 
-// `initial` : valeurs pré-remplies (depuis une recommandation d'audit) ; `returnTo` : projet
-// vers lequel revenir après l'enregistrement.
-export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<string, string>; returnTo?: string }) {
-  const [state, action, pending] = useActionState(createLicense, initialFormState);
+// `initial` : valeurs pré-remplies (recommandation d'audit, ou licence modifiée) ; `returnTo` :
+// projet vers lequel revenir après l'enregistrement ; `licenseId` : mode modification.
+export function LicenseForm({
+  initial = {},
+  returnTo,
+  licenseId,
+}: {
+  initial?: Record<string, string>;
+  returnTo?: string;
+  licenseId?: string;
+}) {
+  const [state, action, pending] = useActionState(licenseId ? updateLicense : createLicense, initialFormState);
   const [platform, setPlatform] = useState<Platform | "">((initial.platform as Platform) ?? "");
   const [upload, setUpload] = useState<{ documents: UploadedDocument[]; uploading: boolean }>({
     documents: [],
@@ -68,6 +76,7 @@ export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<strin
       {state.error && <Alert tone="error">{state.error}</Alert>}
       <input type="hidden" name="documents" value={JSON.stringify(upload.documents)} />
       {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
+      {licenseId && <input type="hidden" name="licenseId" value={licenseId} />}
 
       <section className="space-y-4">
         <h2 className="font-medium">Ressource</h2>
@@ -182,6 +191,21 @@ export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<strin
             error={err.licenseKey}
           />
         </div>
+        <label className="flex cursor-pointer gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+          <input
+            type="checkbox"
+            name="mustStayActive"
+            defaultChecked={v.mustStayActive === "on"}
+            className="mt-0.5 accent-neutral-900"
+          />
+          <span>
+            <span className="block text-sm font-medium">Doit rester active pendant l&apos;exploitation</span>
+            <span className="block text-xs text-neutral-500">
+              À cocher si la vidéo n&apos;est plus couverte une fois la licence expirée (abonnement, licence à durée limitée) :
+              l&apos;audit vérifie alors l&apos;expiration à la date du jour, même après la diffusion.
+            </span>
+          </span>
+        </label>
         <div className="space-y-1.5">
           <label htmlFor="notes" className="block text-sm font-medium text-neutral-700">
             Notes (facultatif)
@@ -197,6 +221,7 @@ export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<strin
         </div>
       </section>
 
+      {!licenseId && (
       <section className="space-y-4">
         <div>
           <h2 className="font-medium">Preuves</h2>
@@ -207,13 +232,20 @@ export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<strin
         <DocumentDropzone onChange={onUploadChange} />
         {err.documents && <p className="text-xs text-red-600">{err.documents}</p>}
       </section>
+      )}
 
       <div className="flex items-center justify-end gap-3 border-t border-neutral-200 pt-6">
         <Link href={returnTo ?? "/vault"} className={buttonClass("ghost")}>
           Annuler
         </Link>
         <button type="submit" disabled={pending || upload.uploading} className={buttonClass("primary")}>
-          {upload.uploading ? "Envoi des fichiers…" : pending ? "Enregistrement…" : "Enregistrer la licence"}
+          {upload.uploading
+            ? "Envoi des fichiers…"
+            : pending
+              ? "Enregistrement…"
+              : licenseId
+                ? "Enregistrer les modifications"
+                : "Enregistrer la licence"}
         </button>
       </div>
     </form>

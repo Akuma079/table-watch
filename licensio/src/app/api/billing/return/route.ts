@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
   let synced = false;
   if (sessionId && billingConfigured()) {
     try {
-      synced = (await syncCheckoutSession(sessionId, workspace.id))?.plan === "AGENCY";
+      const synced_ = await syncCheckoutSession(sessionId, workspace.id);
+      synced = Boolean(synced_ && synced_.plan !== "FREE");
     } catch (e) {
       console.error("[stripe] synchronisation du retour de Checkout", e);
     }

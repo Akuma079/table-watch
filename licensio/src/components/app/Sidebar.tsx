@@ -14,11 +14,11 @@ export function Sidebar({ ctx }: { ctx: WorkspaceContext }) {
         <WorkspaceSwitcher activeId={ctx.workspace.id} workspaces={ctx.workspaces} />
         <p className="px-1 text-xs text-neutral-500">
           Plan <span className="font-medium text-neutral-900">{PLANS[ctx.workspace.plan].name}</span>
-          {ctx.workspace.plan === "CREATOR" && hasRole(ctx.role, "ADMIN") && (
+          {ctx.workspace.plan !== "AGENCY" && hasRole(ctx.role, "ADMIN") && (
             <>
               {" · "}
               <a href="/pricing" className="underline hover:text-neutral-900">
-                Passer à Agence
+                Changer de forfait
               </a>
             </>
           )}

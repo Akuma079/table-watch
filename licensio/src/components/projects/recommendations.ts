@@ -41,7 +41,7 @@ export function recommendationFor(code: FindingCode, ctx: Ctx): Recommendation |
       };
     case "LICENSE_EXPIRED":
       return {
-        text: "Renouvelez la licence avant la diffusion, ou remplacez la ressource.",
+        text: "Renouvelez la licence (ou retirez la vidéo tant qu'elle n'est plus couverte), ou remplacez la ressource.",
         action: { label: "Ajouter la licence renouvelée", href: addLicenseHref(ctx, required) },
       };
     case "LICENSE_EXPIRING_SOON":

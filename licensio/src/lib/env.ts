@@ -13,9 +13,18 @@ const serverSchema = z.object({
   // Facturation (facultatif : sans ces variables, l'app fonctionne en plan gratuit seul).
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_CREATOR: z.string().optional(),
   STRIPE_PRICE_AGENCY: z.string().optional(),
+  // "true" : TVA calculée par Stripe Tax (à activer dans le tableau de bord Stripe).
+  STRIPE_TAX_ENABLED: z.string().optional(),
   // Autre point d'accès API (stripe-mock, tests) ; vide = API Stripe officielle.
   STRIPE_API_BASE: z.string().url().optional(),
+  // Emails d'invitation (facultatif : sans clé, le lien est à transmettre à la main).
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(), // ex. "Licensio <invitations@votre-domaine.com>"
+  RESEND_API_BASE: z.string().url().optional(),
+  // Secret des tâches planifiées (nettoyage des fichiers orphelins).
+  CRON_SECRET: z.string().optional(),
 });
 
 let cached: z.infer<typeof serverSchema> | undefined;

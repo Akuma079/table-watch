@@ -18,11 +18,11 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Coffre-fort" };
 
-type Search = { q?: string; platform?: string; type?: string; added?: string };
+type Search = { q?: string; platform?: string; type?: string; added?: string; updated?: string };
 
 export default async function VaultPage({ searchParams }: { searchParams: Promise<Search> }) {
   const { workspace, role } = await requireWorkspace();
-  const { q = "", platform = "", type = "", added } = await searchParams;
+  const { q = "", platform = "", type = "", added, updated } = await searchParams;
   const canEdit = hasRole(role, "MEMBER");
 
   const where: Prisma.LicenseWhereInput = { workspaceId: workspace.id };
@@ -52,6 +52,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     prisma.license.count({ where: { workspaceId: workspace.id } }),
   ]);
   const addedLicense = added ? licenses.find((l) => l.id === added) : undefined;
+  const updatedLicense = updated ? licenses.find((l) => l.id === updated) : undefined;
 
   return (
     <>
@@ -74,6 +75,11 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
       {addedLicense && (
         <div className="mb-6">
           <Alert tone="success">Licence « {addedLicense.assetName} » ajoutée au coffre-fort.</Alert>
+        </div>
+      )}
+      {updatedLicense && (
+        <div className="mb-6">
+          <Alert tone="success">Licence « {updatedLicense.assetName} » modifiée : les projets ont été ré-audités.</Alert>
         </div>
       )}
 
@@ -177,7 +183,12 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                       <AttachDocumentsForm licenseId={l.id} defaultOpen={l.documents.length === 0 && licenses.length === 1} />
                     )}
                   </div>
-                  <DeleteLicenseButton licenseId={l.id} assetName={l.assetName} />
+                  <div className="flex items-center gap-3">
+                    <Link href={`/vault/${l.id}/edit`} className="text-sm text-neutral-600 hover:text-neutral-900 hover:underline">
+                      Modifier
+                    </Link>
+                    <DeleteLicenseButton licenseId={l.id} assetName={l.assetName} />
+                  </div>
                 </div>
               )}
             </li>

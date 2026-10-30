@@ -6,7 +6,7 @@ const GUEST_ONLY = ["/login", "/register", "/forgot-password"];
 // Accessibles sans session. Tout le reste (/dashboard, /vault, /projects, /settings…)
 // exige d'être connecté.
 // Le webhook Stripe s'authentifie par sa signature, pas par une session.
-const PUBLIC_PREFIXES = [...GUEST_ONLY, "/auth", "/passport", "/invite", "/pricing", "/api/stripe/webhook"];
+const PUBLIC_PREFIXES = [...GUEST_ONLY, "/auth", "/passport", "/invite", "/pricing", "/api/stripe/webhook", "/api/cron"];
 
 function matches(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));

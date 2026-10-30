@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { auditProject, evaluateAsset, type AuditAsset, type AuditLicense } from "./compliance-rules";
+import { auditProject, evaluateAsset, suggestLicenses, titleSimilarity, type AuditAsset, type AuditLicense } from "./compliance-rules";
 import { normalizeAssetName } from "./normalize";
 import { parseAssetLine } from "@/lib/asset-parse";
 
@@ -21,6 +21,7 @@ function license(over: Partial<AuditLicense> = {}): AuditLicense {
     licenseKey: "ART-1",
     expiresAt: null,
     revokedAt: null,
+    mustStayActive: false,
     documentCount: 1,
     ...over,
   };
@@ -136,4 +137,46 @@ test("analyse d'une liste collée", () => {
   const t = parseAssetLine("- Midnight Drive — Ikson")!;
   assert.deepEqual([t.assetName, t.author], ["Midnight Drive", "Ikson"]);
   assert.equal(parseAssetLine("   "), null);
+});
+
+test("licence à garder active : expirée après la diffusion → rouge", () => {
+  const project = { usage: "COMMERCIAL" as const, publishedAt: d("2026-01-10") };
+  const lic = { expiresAt: d("2026-06-01") };
+  assert.equal(evaluateAsset(asset("Golden Hour"), [license(lic)], project, NOW).severity, "OK");
+  const r = evaluateAsset(asset("Golden Hour"), [license({ ...lic, mustStayActive: true })], project, NOW);
+  assert.equal(r.severity, "ERROR");
+  assert.equal(r.findings[0].code, "LICENSE_EXPIRED");
+  assert.match(r.findings[0].message, /pendant l'exploitation/);
+});
+
+test("licence à garder active : expire bientôt même après la diffusion → orange", () => {
+  const project = { usage: "COMMERCIAL" as const, publishedAt: d("2026-01-10") };
+  const r = evaluateAsset(asset("Golden Hour"), [license({ expiresAt: d("2026-11-10"), mustStayActive: true })], project, NOW);
+  assert.equal(r.severity, "WARNING");
+  assert.equal(r.findings[0].code, "LICENSE_EXPIRING_SOON");
+});
+
+test("licence restreinte : orange, puis verte une fois les conditions vérifiées", () => {
+  const lic = license({ licenseType: "RESTRICTED" });
+  assert.equal(evaluateAsset(asset("Golden Hour"), [lic], commercial, NOW).severity, "WARNING");
+  const approved = asset("Golden Hour", { restrictedApproval: { licenseId: "lic1", at: d("2026-10-29"), by: "Marie" } });
+  const r = evaluateAsset(approved, [lic], commercial, NOW);
+  assert.equal(r.severity, "OK");
+  assert.match(r.findings[0].message, /Conditions vérifiées pour ce projet par Marie/);
+});
+
+test("validation d'une licence restreinte : valable pour cette licence seulement", () => {
+  const other = license({ id: "lic2", licenseType: "RESTRICTED" });
+  const approved = asset("Golden Hour", { restrictedApproval: { licenseId: "lic1", at: d("2026-10-29"), by: null } });
+  assert.equal(evaluateAsset(approved, [other], commercial, NOW).severity, "WARNING");
+});
+
+test("suggestions de licences au titre proche", () => {
+  const lics = [license(), license({ id: "lic2", assetName: "Midnight City" }), license({ id: "lic3", assetName: "Golden Sun" })];
+  const s = suggestLicenses(normalizeAssetName("Golden Hour (Extended Mix)"), lics);
+  assert.equal(s[0].license.id, "lic1");
+  assert.ok(!s.some((x) => x.license.id === "lic2"));
+  assert.equal(suggestLicenses(normalizeAssetName("Goldn Hour"), lics)[0].license.id, "lic1");
+  assert.equal(suggestLicenses(normalizeAssetName("Tout autre chose"), lics).length, 0);
+  assert.ok(titleSimilarity("golden hour", "golden hour") === 1);
 });

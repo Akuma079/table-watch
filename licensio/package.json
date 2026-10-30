@@ -14,6 +14,8 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "storage:setup": "tsx --env-file=.env scripts/setup-storage.ts",
+    "storage:cleanup": "tsx --env-file=.env scripts/cleanup-storage.ts",
+    "db:seed": "tsx --env-file=.env --conditions=react-server prisma/seed.ts",
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {

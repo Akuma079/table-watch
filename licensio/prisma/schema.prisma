@@ -28,11 +28,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships       Membership[]
-  invitationsSent   Invitation[]      @relation("InvitationInvitedBy")
-  licensesCreated   License[]         @relation("LicenseCreatedBy")
-  projectsCreated   Project[]         @relation("ProjectCreatedBy")
-  documentsUploaded LicenseDocument[]
+  memberships         Membership[]
+  invitationsSent     Invitation[]      @relation("InvitationInvitedBy")
+  licensesCreated     License[]         @relation("LicenseCreatedBy")
+  projectsCreated     Project[]         @relation("ProjectCreatedBy")
+  documentsUploaded   LicenseDocument[]
+  restrictedApprovals ProjectAsset[]    @relation("RestrictedApprovals")
 
   @@map("users")
 }
@@ -47,12 +48,16 @@ model Workspace {
 
   // Abonnement : porté par l'espace (une agence paie pour son espace, pas par personne).
   // `plan` est le droit effectif, recalculé à chaque événement Stripe.
-  plan                 WorkspacePlan @default(CREATOR)
+  plan                 WorkspacePlan @default(FREE)
   stripeCustomerId     String?       @unique
   stripeSubscriptionId String?       @unique
   subscriptionStatus   String? // statut Stripe brut : active, trialing, past_due, canceled…
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean       @default(false)
+
+  // Après la perte d'un plan incluant le Passeport, les liens déjà envoyés restent
+  // consultables jusqu'à cette date (30 jours), puis cessent de répondre.
+  passportGraceUntil DateTime?
 
   // Marque blanche du Passeport de Droits (plan Agence)
   brandName  String? // à défaut : le nom de l'espace
@@ -66,9 +71,11 @@ model Workspace {
   @@map("workspaces")
 }
 
+// Détail des limites et fonctionnalités : src/lib/plans.ts
 enum WorkspacePlan {
-  CREATOR // gratuit : 5 projets, 50 licences, 1 membre, pas de passeport
-  AGENCY // payant : illimité, passeport en marque blanche, multi-utilisateurs
+  CREATOR // 19 €/mois : 5 projets, 50 licences, 1 membre, passeport à la marque Licensio
+  AGENCY // 79 €/mois : illimité, passeport en marque blanche, multi-utilisateurs
+  FREE // gratuit : 1 projet, 10 licences, 1 membre, pas de passeport
 }
 
 // OWNER : tout, dont la gestion des membres ; un seul par espace (le créateur).
@@ -105,6 +112,7 @@ model Invitation {
   tokenHash   String        @unique
   invitedById String?       @db.Uuid
   expiresAt   DateTime
+  emailSentAt DateTime? // envoi de l'email d'invitation (null : lien à transmettre à la main)
   acceptedAt  DateTime?
   revokedAt   DateTime?
   createdAt   DateTime      @default(now())
@@ -172,6 +180,9 @@ model License {
   purchaseDate   DateTime    @db.Date
   expiresAt      DateTime?   @db.Date // null = perpétuelle
   revokedAt      DateTime? // révocation manuelle (litige, remboursement…)
+  // Vrai : la licence doit rester valide pendant toute l'exploitation de la vidéo
+  // (l'expiration compte même après la diffusion). Faux : valable à la diffusion suffit.
+  mustStayActive Boolean     @default(false)
   notes          String?
 
   createdAt DateTime @default(now())
@@ -348,6 +359,13 @@ model ProjectAsset {
   // Licence retenue par le dernier audit (ou choisie manuellement)
   licenseId   String?
   matchMethod MatchMethod?
+
+  // Licence « utilité restreinte » dont un membre a vérifié les conditions pour ce
+  // projet. La validation ne vaut que pour cette licence précise.
+  restrictedApprovedLicenseId String?
+  restrictedApprovedAt        DateTime?
+  restrictedApprovedById      String?   @db.Uuid
+  restrictedApprovedBy        User?     @relation("RestrictedApprovals", fields: [restrictedApprovedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

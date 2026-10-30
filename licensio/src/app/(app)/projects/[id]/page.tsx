@@ -14,7 +14,8 @@ import {
   PROJECT_USAGE_LABELS,
 } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
-import { deleteProject, removeProjectAsset, runProjectAudit } from "@/server/actions/projects";
+import { deleteProject, linkAssetLicense, removeProjectAsset, runProjectAudit, setRestrictedApproval } from "@/server/actions/projects";
+import { suggestLicenses } from "@/server/services/compliance-rules";
 import { auditIsStale, checkCompliance } from "@/server/services/compliance";
 import { passportUrl } from "@/server/passport/data";
 import { AddAssetsForm } from "@/components/projects/AddAssetsForm";
@@ -62,7 +63,10 @@ export default async function ProjectPage({
         media: { select: { id: true, source: true, externalUrl: true, processingStatus: true } },
         assets: {
           orderBy: { createdAt: "asc" },
-          include: { license: { select: { id: true, assetName: true, platform: true, licenseType: true, licenseKey: true } } },
+          include: {
+            license: { select: { id: true, assetName: true, platform: true, licenseType: true, licenseKey: true } },
+            restrictedApprovedBy: { select: { name: true, email: true } },
+          },
         },
         audits: { orderBy: { startedAt: "desc" }, take: 1, include: { findings: true } },
       },
@@ -70,7 +74,7 @@ export default async function ProjectPage({
     prisma.license.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { assetName: "asc" },
-      select: { id: true, assetName: true, author: true, platform: true, licenseType: true },
+      select: { id: true, assetName: true, normalizedName: true, author: true, platform: true, licenseType: true },
     }),
   ]);
 
@@ -165,6 +169,10 @@ export default async function ProjectPage({
               const findings = [...(findingsByAsset.get(asset.id) ?? [])].sort(
                 (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
               );
+              const missing = findings.some((f) => f.code === "MISSING_LICENSE");
+              const suggestions = missing && canEdit ? suggestLicenses(asset.normalizedName, licenses) : [];
+              const restricted = asset.license?.licenseType === "RESTRICTED" && project.usage !== "PERSONAL";
+              const approved = restricted && asset.restrictedApprovedLicenseId === asset.license?.id && asset.restrictedApprovedAt;
               const recos = findings
                 .map((f) => recommendationFor(f.code, { projectId: project.id, usage: project.usage, asset, license: asset.license }))
                 .filter((r) => r !== null);
@@ -206,6 +214,48 @@ export default async function ProjectPage({
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {suggestions.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-dashed border-neutral-300 px-4 py-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">Licences au titre proche</p>
+                      <ul className="mt-1.5 space-y-1.5">
+                        {suggestions.map(({ license: l }) => (
+                          <li key={l.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-sm text-neutral-700">
+                              {l.assetName}
+                              {l.author ? ` — ${l.author}` : ""} · {PLATFORM_LABELS[l.platform]} · {LICENSE_TYPE_LABELS[l.licenseType]}
+                            </span>
+                            <form action={linkAssetLicense}>
+                              <input type="hidden" name="assetId" value={asset.id} />
+                              <input type="hidden" name="licenseId" value={l.id} />
+                              <button type="submit" className={buttonClass("secondary", "shrink-0 py-1.5 text-xs")}>
+                                Associer
+                              </button>
+                            </form>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {restricted && (canEdit || approved) && (
+                    <div className="mt-3 flex flex-col gap-2 rounded-lg bg-neutral-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-neutral-700">
+                        {approved
+                          ? `Conditions vérifiées par ${asset.restrictedApprovedBy?.name || asset.restrictedApprovedBy?.email || "un ancien membre"} le ${dateFormat.format(asset.restrictedApprovedAt!)}.`
+                          : "Une fois les conditions relues, confirmez qu&apos;elles couvrent ce projet."}
+                      </p>
+                      {canEdit && (
+                        <form action={setRestrictedApproval}>
+                          <input type="hidden" name="assetId" value={asset.id} />
+                          <input type="hidden" name="approve" value={approved ? "" : "1"} />
+                          <button type="submit" className={buttonClass(approved ? "secondary" : "primary", "shrink-0 py-1.5 text-xs")}>
+                            {approved ? "Annuler la vérification" : "Conditions vérifiées pour ce projet"}
+                          </button>
+                        </form>
+                      )}
                     </div>
                   )}
 
@@ -259,9 +309,14 @@ export default async function ProjectPage({
             canEdit={canEdit}
           />
         ) : (
-          <UpgradeNotice title="Remettez un Passeport de Droits à votre client" canManage={hasRole(role, "ADMIN")}>
-            Un certificat public et un PDF, à votre marque, qui listent chaque ressource et son identifiant de licence. Inclus dans
-            le plan Agence.
+          <UpgradeNotice title="Remettez un Passeport de Droits à votre client" canManage={hasRole(role, "ADMIN")} planName="Creator">
+            Un certificat public et un PDF qui listent chaque ressource et son identifiant de licence. Inclus dans les forfaits
+            Creator (19 €/mois) et Agence, à votre marque.
+            {project.passportEnabled && workspace.passportGraceUntil && workspace.passportGraceUntil > new Date() && (
+              <span className="mt-2 block font-medium">
+                Le lien déjà partagé pour ce projet reste consultable jusqu&apos;au {dateFormat.format(workspace.passportGraceUntil)}.
+              </span>
+            )}
           </UpgradeNotice>
         )}
       </section>

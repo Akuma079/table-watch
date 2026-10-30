@@ -123,6 +123,7 @@ export function PassportDocument({ passport: p, qrDataUrl, generatedAt }: { pass
           <View key={i} style={s.tr} wrap={false}>
             <View style={s.cName}>
               <Text style={{ fontFamily: "Helvetica-Bold" }}>{a.name}</Text>
+              {a.licenseName && <Text style={s.muted}>Licence : {a.licenseName}</Text>}
               <Text style={s.muted}>{[a.author, ASSET_TYPE_LABELS[a.assetType], a.platform].filter(Boolean).join(" · ")}</Text>
               {a.notes.map((n) => (
                 <Text key={n} style={[s.note, { color: ROW[a.severity].color }]}>

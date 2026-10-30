@@ -103,6 +103,7 @@ export default async function PassportPage({ params }: Props) {
                           {a.name}
                           {a.author && <span className="font-normal text-neutral-500"> — {a.author}</span>}
                         </p>
+                        {a.licenseName && <p className="mt-0.5 text-sm text-neutral-600">Licence : {a.licenseName}</p>}
                         <p className="mt-0.5 text-sm text-neutral-500">
                           {[ASSET_TYPE_LABELS[a.assetType], a.platform, a.licenseType && `Licence ${LICENSE_TYPE_LABELS[a.licenseType].toLowerCase()}`]
                             .filter(Boolean)

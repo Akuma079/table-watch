@@ -15,6 +15,8 @@ import {
   requireWorkspaceRole,
 } from "@/server/auth";
 import { hashInvitationToken, invitationExpiry, newInvitationToken } from "@/server/invitations";
+import { emailConfigured, invitationEmail, sendEmail } from "@/server/email";
+import { ROLE_LABELS } from "@/lib/labels";
 import { fieldErrors, str } from "./form";
 import type { FormState } from "./types";
 
@@ -93,7 +95,7 @@ export async function inviteMember(_prev: InviteState, formData: FormData): Prom
   if (alreadyMember) return { error: `${email} fait déjà partie de cet espace.`, values };
 
   const { token, tokenHash } = newInvitationToken();
-  await prisma.$transaction([
+  const [, invitation] = await prisma.$transaction([
     // Une seule invitation active par adresse : la nouvelle remplace l'ancienne.
     prisma.invitation.updateMany({
       where: { workspaceId: ctx.workspace.id, email, acceptedAt: null, revokedAt: null },
@@ -108,15 +110,33 @@ export async function inviteMember(_prev: InviteState, formData: FormData): Prom
         invitedById: ctx.user.id,
         expiresAt: invitationExpiry(),
       },
+      select: { id: true },
     }),
   ]);
 
+  const inviteUrl = `${serverEnv().NEXT_PUBLIC_APP_URL}/invite/${token}`;
+  const sent = await sendEmail({
+    to: email,
+    replyTo: ctx.user.email,
+    ...invitationEmail({
+      workspaceName: ctx.workspace.name,
+      inviterName: ctx.user.name || ctx.user.email,
+      roleLabel: ROLE_LABELS[role],
+      url: inviteUrl,
+    }),
+  });
+  if (sent) await prisma.invitation.update({ where: { id: invitation.id }, data: { emailSentAt: new Date() } });
+
   revalidatePath("/settings/members");
-  // Pas encore d'envoi d'email (aucun fournisseur configuré) : le lien est affiché
-  // une seule fois pour être transmis à la personne invitée.
+  // Le lien n'est affiché qu'une fois (seul son empreinte est en base) : il reste copiable,
+  // que l'email soit parti ou non.
   return {
-    success: `Invitation créée pour ${email}. Transmettez-lui ce lien (valable 7 jours) :`,
-    inviteUrl: `${serverEnv().NEXT_PUBLIC_APP_URL}/invite/${token}`,
+    success: sent
+      ? `Invitation envoyée par email à ${email}. Vous pouvez aussi lui transmettre ce lien (valable 7 jours) :`
+      : emailConfigured()
+        ? `L'email n'a pas pu être envoyé à ${email}. Transmettez-lui ce lien (valable 7 jours) :`
+        : `Invitation créée pour ${email}. Transmettez-lui ce lien (valable 7 jours) :`,
+    inviteUrl,
   };
 }
 

@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { auditProject, startOfUtcDay, type AuditLicense, type ProjectResult } from "./compliance-rules";
 
-async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
+export async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
   const rows = await prisma.license.findMany({
     where: { workspaceId },
     select: {
@@ -17,6 +17,7 @@ async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
       licenseKey: true,
       expiresAt: true,
       revokedAt: true,
+      mustStayActive: true,
       _count: { select: { documents: true } },
     },
   });
@@ -37,11 +38,32 @@ export async function checkCompliance(
       usage: true,
       publishedAt: true,
       assets: {
-        select: { id: true, normalizedName: true, platform: true, sourceUrl: true, licenseId: true, matchMethod: true },
+        select: {
+          id: true,
+          normalizedName: true,
+          platform: true,
+          sourceUrl: true,
+          licenseId: true,
+          matchMethod: true,
+          restrictedApprovedLicenseId: true,
+          restrictedApprovedAt: true,
+          restrictedApprovedBy: { select: { name: true, email: true } },
+        },
       },
     },
   });
-  const result = auditProject(project, project.assets, licenses ?? (await loadLicenses(workspaceId)));
+  const assets = project.assets.map(({ restrictedApprovedLicenseId, restrictedApprovedAt, restrictedApprovedBy, ...a }) => ({
+    ...a,
+    restrictedApproval:
+      restrictedApprovedLicenseId && restrictedApprovedAt
+        ? {
+            licenseId: restrictedApprovedLicenseId,
+            at: restrictedApprovedAt,
+            by: restrictedApprovedBy ? restrictedApprovedBy.name || restrictedApprovedBy.email : null,
+          }
+        : null,
+  }));
+  const result = auditProject(project, assets, licenses ?? (await loadLicenses(workspaceId)));
   const now = new Date();
 
   await prisma.$transaction([

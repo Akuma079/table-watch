@@ -1,13 +1,21 @@
 import "server-only";
 import Stripe from "stripe";
 import type { Workspace } from "@prisma/client";
+import type { PaidPlan } from "@/lib/plans";
 import { serverEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
-import { workspaceBillingFields, type SubscriptionSnapshot } from "./subscription";
+import { workspaceBillingFields, type PriceMap, type SubscriptionSnapshot } from "./subscription";
 
-export function billingConfigured() {
+// Paiement possible pour ce forfait (clé secrète + ID de prix configurés).
+export function billingConfigured(plan?: PaidPlan) {
   const env = serverEnv();
-  return Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PRICE_AGENCY);
+  if (!env.STRIPE_SECRET_KEY) return false;
+  const prices = priceMap();
+  return plan ? Boolean(prices[plan]) : Boolean(prices.CREATOR || prices.AGENCY);
+}
+
+export function taxEnabled() {
+  return serverEnv().STRIPE_TAX_ENABLED === "true";
 }
 
 let client: Stripe | undefined;
@@ -29,8 +37,9 @@ export function getStripe() {
   return client;
 }
 
-export function priceMap() {
-  return { AGENCY: serverEnv().STRIPE_PRICE_AGENCY };
+export function priceMap(): PriceMap {
+  const env = serverEnv();
+  return { CREATOR: env.STRIPE_PRICE_CREATOR, AGENCY: env.STRIPE_PRICE_AGENCY };
 }
 
 function snapshot(sub: Stripe.Subscription): SubscriptionSnapshot {
@@ -64,10 +73,10 @@ export async function syncSubscription(subscriptionId: string, workspaceHint?: s
     return null;
   }
 
-  const fields = workspaceBillingFields(snapshot(sub), priceMap());
+  const fields = workspaceBillingFields(snapshot(sub), priceMap(), workspace);
   // Événement tardif d'un ancien abonnement (ex. annulation d'un abonnement remplacé) :
   // il ne doit pas rétrograder l'espace qui en a un autre, actif.
-  if (workspace.stripeSubscriptionId && workspace.stripeSubscriptionId !== sub.id && fields.plan === "CREATOR") {
+  if (workspace.stripeSubscriptionId && workspace.stripeSubscriptionId !== sub.id && fields.plan === "FREE") {
     return workspace;
   }
 

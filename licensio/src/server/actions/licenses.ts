@@ -106,6 +106,7 @@ const licenseInput = z
     licenseKey: optionalText(200),
     sourceUrl: z.union([z.literal("").transform(() => null), z.string().trim().url("Lien invalide.").max(500)]),
     notes: optionalText(2000),
+    mustStayActive: z.string().transform((v) => v === "on"),
     documents: z.array(documentInput).max(DOCUMENT_MAX_FILES, `${DOCUMENT_MAX_FILES} fichiers maximum.`),
   })
   .superRefine((d, ctx) => {
@@ -160,6 +161,7 @@ const TEXT_FIELDS = [
   "licenseKey",
   "sourceUrl",
   "notes",
+  "mustStayActive",
 ] as const;
 
 function parseDocuments(raw: string): unknown {
@@ -211,6 +213,7 @@ export async function createLicense(_prev: FormState, formData: FormData): Promi
       licenseKey: data.licenseKey,
       sourceUrl: data.sourceUrl,
       notes: data.notes,
+      mustStayActive: data.mustStayActive,
       documents: { create: documents },
     },
     include: { documents: { select: { id: true } } },
@@ -225,6 +228,57 @@ export async function createLicense(_prev: FormState, formData: FormData): Promi
   revalidatePath("/dashboard");
   const back = safeNextPath(str(formData, "returnTo"), "");
   redirect(back.startsWith("/projects/") ? `${back}?licenseAdded=1` : `/vault?added=${license.id}`);
+}
+
+// ───────── Modification ─────────
+
+export async function updateLicense(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = Object.fromEntries(TEXT_FIELDS.map((k) => [k, str(formData, k)]));
+  let ctx;
+  try {
+    ctx = await requireWorkspaceRole("MEMBER");
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { error: e.message, values };
+    throw e;
+  }
+  const existing = await prisma.license.findFirst({
+    where: { id: str(formData, "licenseId"), workspaceId: ctx.workspace.id },
+    select: { id: true },
+  });
+  if (!existing) return { error: "Licence introuvable.", values };
+
+  // Les preuves se gèrent depuis le coffre-fort : on ne les touche pas ici.
+  const parsed = licenseInput.safeParse({ ...values, documents: [] });
+  if (!parsed.success) {
+    return { error: "Certains champs sont à corriger.", fieldErrors: fieldErrors(parsed.error), values };
+  }
+  const data = parsed.data;
+
+  await prisma.license.update({
+    where: { id: existing.id },
+    data: {
+      assetName: data.assetName,
+      normalizedName: normalizeAssetName(data.assetName),
+      author: data.author,
+      assetType: data.assetType,
+      platform: data.platform,
+      platformOther: data.platform === "OTHER" ? data.platformOther : null,
+      licenseType: data.licenseType,
+      purchaseDate: data.purchaseDate,
+      expiresAt: data.expiresAt,
+      licenseKey: data.licenseKey,
+      sourceUrl: data.sourceUrl,
+      notes: data.notes,
+      mustStayActive: data.mustStayActive,
+    },
+  });
+  // Titre, type ou expiration modifiés : les projets de l'espace peuvent changer de statut.
+  await auditWorkspaceProjects(ctx.workspace.id);
+
+  revalidatePath("/vault");
+  revalidatePath("/projects", "layout");
+  revalidatePath("/dashboard");
+  redirect(`/vault?updated=${existing.id}`);
 }
 
 // ───────── Suppression ─────────
