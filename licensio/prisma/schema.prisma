@@ -1,0 +1,369 @@
+// Licensio — schéma de base de données
+//
+// Principes :
+// - Tout appartient à une Team. Chaque utilisateur reçoit une équipe personnelle
+//   à l'inscription : un créateur solo et une agence utilisent le même modèle.
+// - User.id = l'identifiant Supabase Auth (auth.users.id) ; pas de mot de passe ici.
+// - Les fichiers (PDF de licence, factures, médias) vivent dans Supabase Storage ;
+//   la base ne garde que leur chemin (storagePath).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooler Supabase (port 6543) en production
+  directUrl = env("DIRECT_URL") // connexion directe (port 5432) pour les migrations
+}
+
+// ───────────────────────── Comptes & équipes ─────────────────────────
+
+model User {
+  id        String   @id @db.Uuid
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  licensesCreated   License[]         @relation("LicenseCreatedBy")
+  projectsCreated   Project[]         @relation("ProjectCreatedBy")
+  documentsUploaded LicenseDocument[]
+
+  @@map("users")
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  isPersonal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members  Membership[]
+  licenses License[]
+  projects Project[]
+
+  @@map("teams")
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String   @db.Uuid
+  teamId    String
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+  @@map("memberships")
+}
+
+// ───────────────────────── Coffre-fort ─────────────────────────
+
+enum Platform {
+  ENVATO_ELEMENTS
+  ARTLIST
+  EPIDEMIC_SOUND
+  ARTGRID
+  MUSICBED
+  SOUNDSTRIPE
+  SHUTTERSTOCK
+  ADOBE_STOCK
+  POND5
+  STORYBLOCKS
+  OTHER
+}
+
+enum AssetType {
+  MUSIC
+  SFX
+  STOCK_VIDEO
+  IMAGE
+  FONT
+  OTHER
+}
+
+// Ordre croissant de droits : PERSONAL < COMMERCIAL < EXTENDED.
+enum LicenseType {
+  PERSONAL
+  COMMERCIAL
+  EXTENDED
+}
+
+model License {
+  id          String  @id @default(cuid())
+  teamId      String
+  createdById String? @db.Uuid
+
+  assetName      String
+  // Nom normalisé (minuscules, sans accents ni ponctuation) pour la correspondance.
+  normalizedName String
+  assetType      AssetType   @default(MUSIC)
+  platform       Platform
+  platformOther  String? // libellé libre si platform = OTHER
+  sourceUrl      String? // page de la ressource chez le fournisseur
+  licenseType    LicenseType
+  // Identifiant fourni par la plateforme (n° de licence, code d'enregistrement…),
+  // affiché dans le Passeport de Droits.
+  licenseKey     String?
+  purchaseDate   DateTime    @db.Date
+  expiresAt      DateTime?   @db.Date // null = perpétuelle
+  revokedAt      DateTime? // révocation manuelle (litige, remboursement…)
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team      Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("LicenseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  documents LicenseDocument[]
+  usages    ProjectAsset[]
+
+  @@index([teamId, normalizedName])
+  @@index([teamId, platform])
+  @@map("licenses")
+}
+
+enum DocumentKind {
+  LICENSE_CERTIFICATE
+  INVOICE
+  RECEIPT
+  OTHER
+}
+
+enum OcrStatus {
+  NOT_REQUESTED
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model LicenseDocument {
+  id           String       @id @default(cuid())
+  licenseId    String
+  uploadedById String?      @db.Uuid
+  kind         DocumentKind @default(LICENSE_CERTIFICATE)
+  fileName     String
+  storagePath  String       @unique // chemin dans le bucket Supabase "license-documents"
+  mimeType     String
+  sizeBytes    Int
+  sha256       String? // empreinte du fichier, détection des doublons
+
+  ocrStatus OcrStatus @default(NOT_REQUESTED)
+  ocrText   String?
+  // Champs extraits par l'OCR (placeholder pour le MVP) : { licenseKey, purchaseDate, … }
+  ocrFields Json?
+
+  createdAt DateTime @default(now())
+
+  license    License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([licenseId])
+  @@map("license_documents")
+}
+
+// ───────────────────────── Projets & médias ─────────────────────────
+
+// Usage prévu de la vidéo : détermine le niveau de licence exigé.
+// PERSONAL → toute licence ; COMMERCIAL → COMMERCIAL ou EXTENDED ;
+// BROADCAST (TV, cinéma, publicité payante) → EXTENDED.
+enum ProjectUsage {
+  PERSONAL
+  COMMERCIAL
+  BROADCAST
+}
+
+enum ComplianceStatus {
+  PENDING // jamais audité, ou modifié depuis le dernier audit
+  COMPLIANT // vert : toutes les ressources couvertes
+  NON_COMPLIANT // rouge : au moins une ressource manquante, expirée ou insuffisante
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  teamId      String
+  createdById String?      @db.Uuid
+  name        String
+  clientName  String?
+  description String?
+  usage       ProjectUsage @default(COMMERCIAL)
+  publishedAt DateTime?    @db.Date // date de diffusion : sert à vérifier l'expiration
+
+  complianceStatus ComplianceStatus @default(PENDING)
+  lastAuditAt      DateTime?
+
+  // Passeport de Droits public : /passport/<passportToken>
+  passportToken   String? @unique
+  passportEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  media     MediaFile[]
+  assets    ProjectAsset[]
+  audits    AuditRun[]
+
+  @@index([teamId, complianceStatus])
+  @@map("projects")
+}
+
+enum MediaSource {
+  UPLOAD
+  YOUTUBE
+  GOOGLE_DRIVE
+  OTHER_URL
+}
+
+enum ProcessingStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model MediaFile {
+  id          String      @id @default(cuid())
+  projectId   String
+  source      MediaSource
+  fileName    String?
+  storagePath String?     @unique // si source = UPLOAD (bucket "project-media")
+  externalUrl String? // si lien YouTube / Drive
+  mimeType    String?
+  sizeBytes   BigInt?
+  durationSec Int?
+
+  processingStatus ProcessingStatus @default(PENDING)
+  processingJobId  String? // id du job BullMQ
+  processingError  String?
+  // Empreinte audio (placeholder pour le MVP)
+  fingerprint      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Ressources détectées automatiquement dans ce média (futur : reconnaissance audio)
+  detectedAssets ProjectAsset[]
+
+  @@index([projectId])
+  @@map("media_files")
+}
+
+enum AssetOrigin {
+  DECLARED // saisie par l'utilisateur
+  DETECTED // détectée par le traitement du média (placeholder)
+}
+
+enum MatchMethod {
+  MANUAL // l'utilisateur a choisi la licence
+  NAME // correspondance par nom normalisé (+ plateforme)
+  FINGERPRINT // correspondance par empreinte (futur)
+}
+
+model ProjectAsset {
+  id             String      @id @default(cuid())
+  projectId      String
+  mediaFileId    String?
+  origin         AssetOrigin @default(DECLARED)
+  assetName      String
+  normalizedName String
+  assetType      AssetType   @default(MUSIC)
+  platform       Platform?
+  // Position dans le média, facultative (ex. 00:42 → 01:15)
+  startSec       Int?
+  endSec         Int?
+
+  // Licence retenue par le dernier audit (ou choisie manuellement)
+  licenseId   String?
+  matchMethod MatchMethod?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mediaFile MediaFile?     @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+  license   License?       @relation(fields: [licenseId], references: [id], onDelete: SetNull)
+  findings  AuditFinding[]
+
+  @@index([projectId])
+  @@index([licenseId])
+  @@map("project_assets")
+}
+
+// ───────────────────────── Audits ─────────────────────────
+
+enum AuditStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model AuditRun {
+  id         String            @id @default(cuid())
+  projectId  String
+  status     AuditStatus       @default(RUNNING)
+  result     ComplianceStatus?
+  assetCount Int               @default(0)
+  issueCount Int               @default(0)
+  startedAt  DateTime          @default(now())
+  finishedAt DateTime?
+
+  project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  findings AuditFinding[]
+
+  @@index([projectId, startedAt])
+  @@map("audit_runs")
+}
+
+enum FindingSeverity {
+  OK
+  WARNING
+  ERROR
+}
+
+enum FindingCode {
+  LICENSED // couverte par une licence valide
+  MISSING_LICENSE // aucune licence dans le coffre-fort
+  LICENSE_EXPIRED // licence expirée à la date de diffusion
+  LICENSE_REVOKED // licence révoquée
+  LICENSE_TYPE_INSUFFICIENT // ex. usage commercial avec licence personnelle
+  PLATFORM_MISMATCH // même nom, plateforme différente
+  MISSING_PROOF // licence sans aucun document joint
+}
+
+model AuditFinding {
+  id             String          @id @default(cuid())
+  auditRunId     String
+  projectAssetId String
+  licenseId      String? // licence examinée (pas de relation : l'audit reste un historique)
+  severity       FindingSeverity
+  code           FindingCode
+  message        String
+
+  createdAt DateTime @default(now())
+
+  auditRun     AuditRun     @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  projectAsset ProjectAsset @relation(fields: [projectAssetId], references: [id], onDelete: Cascade)
+
+  @@index([auditRunId])
+  @@map("audit_findings")
+}
