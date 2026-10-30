@@ -4,7 +4,7 @@ import { cache } from "react";
 import { cn } from "@/lib/cn";
 import { ASSET_TYPE_LABELS, dateFormat, dayFormat, LICENSE_TYPE_LABELS, PROJECT_USAGE_LABELS } from "@/lib/labels";
 import { loadPassport, PASSPORT_VERDICT } from "@/server/passport/data";
-import { Logo } from "@/components/app/Logo";
+import { BrandMark } from "@/components/passport/BrandMark";
 import { PrintButton } from "@/components/passport/PrintButton";
 import { VerdictSeal } from "@/components/passport/VerdictSeal";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -16,7 +16,10 @@ type Props = { params: Promise<{ token: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const passport = await getPassport((await params).token);
   return {
-    title: passport ? `Passeport de Droits — ${passport.projectName}` : "Passeport introuvable",
+    // Titre absolu : le modèle « … · Licensio » de la mise en page racine trahirait la
+    // marque blanche dans l'onglet du navigateur.
+    title: { absolute: passport ? `Passeport de Droits — ${passport.projectName}` : "Passeport introuvable" },
+    description: passport ? `Ressources et licences du projet ${passport.projectName}, vérifiées par ${passport.issuer}.` : undefined,
     // Lien privé partagé avec le client : pas d'indexation, et le jeton ne fuit pas
     // par l'en-tête Referer vers d'autres sites.
     robots: { index: false, follow: false },
@@ -54,7 +57,7 @@ export default async function PassportPage({ params }: Props) {
     <div className="min-h-screen bg-neutral-100 px-4 py-8 sm:py-14 print:bg-white print:p-0">
       <div className="mx-auto max-w-4xl">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
-          <Logo />
+          <BrandMark brand={p.brand} />
           <div className="flex gap-2">
             <PrintButton />
             <a href={`/passport/${p.token}/pdf`} className={buttonClass("primary")}>
@@ -64,6 +67,7 @@ export default async function PassportPage({ params }: Props) {
         </div>
 
         <article className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm print:rounded-none print:border-0 print:shadow-none">
+          <div aria-hidden className="h-1.5" style={{ backgroundColor: p.brand.color }} />
           <header className="border-b border-neutral-200 px-6 py-8 sm:px-10">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">Passeport de Droits</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{p.projectName}</h1>
@@ -136,7 +140,7 @@ export default async function PassportPage({ params }: Props) {
             )}
             <p>
               Ce passeport recoupe les ressources déclarées par {p.issuer} avec les licences et preuves d&apos;achat
-              enregistrées dans son coffre-fort Licensio, à la date de vérification indiquée. Il ne remplace pas les
+              enregistrées dans son coffre-fort {p.brand.whiteLabel ? "de licences" : "Licensio"}, à la date de vérification indiquée. Il ne remplace pas les
               conditions de licence des plateformes, qui font foi. Cette page est mise à jour en continu : la version en
               ligne prévaut sur toute copie imprimée.
             </p>

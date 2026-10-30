@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { serverEnv } from "@/lib/env";
+import { hasFeature, limitReached, PLANS } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { uniqueSlug } from "@/lib/slug";
 import {
@@ -65,6 +66,10 @@ export async function inviteMember(_prev: InviteState, formData: FormData): Prom
   } catch (e) {
     if (e instanceof ForbiddenError) return { error: e.message, values };
     throw e;
+  }
+
+  if (!hasFeature(ctx.workspace.plan, "multiUser")) {
+    return { error: `Le plan ${PLANS[ctx.workspace.plan].name} est réservé à un seul utilisateur. Passez au plan Agence pour inviter vos collaborateurs.`, values };
   }
 
   const parsed = z
@@ -157,6 +162,14 @@ export async function acceptInvitation(_prev: FormState, formData: FormData): Pr
 
   if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt < new Date()) {
     return { error: "Cette invitation n'est plus valable. Demandez-en une nouvelle." };
+  }
+  // Invitation envoyée avant un passage au plan gratuit : l'espace n'accepte plus de membre.
+  const workspace = await prisma.workspace.findUniqueOrThrow({
+    where: { id: invitation.workspaceId },
+    select: { plan: true, _count: { select: { members: true } } },
+  });
+  if (limitReached(workspace.plan, "members", workspace._count.members)) {
+    return { error: "Cet espace ne peut plus accueillir de nouveau membre avec son abonnement actuel." };
   }
   // Le lien ne suffit pas : il faut être connecté avec l'adresse invitée.
   if (invitation.email !== user.email.toLowerCase()) {

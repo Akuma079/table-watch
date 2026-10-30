@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { dateFormat, ROLE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
 import { removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
+import { hasFeature } from "@/lib/plans";
+import { UpgradeNotice } from "@/components/billing/UpgradeNotice";
 import { InviteForm } from "@/components/workspace/InviteForm";
 import { Alert } from "@/components/ui/Alert";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -38,7 +40,14 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
 
       <section className="mb-10 rounded-xl border border-neutral-200 bg-white p-6">
         <h2 className="mb-4 font-medium">Inviter un collaborateur</h2>
-        <InviteForm canInviteAdmin={isOwner} />
+        {hasFeature(ctx.workspace.plan, "multiUser") ? (
+          <InviteForm canInviteAdmin={isOwner} />
+        ) : (
+          <UpgradeNotice title="Travaillez en équipe avec le plan Agence" canManage>
+            Le plan Creator est réservé à un seul utilisateur. Le plan Agence permet d&apos;inviter vos monteurs, chefs de projet et
+            clients (en lecture seule), sans surcoût par personne.
+          </UpgradeNotice>
+        )}
       </section>
 
       <section className="mb-10">

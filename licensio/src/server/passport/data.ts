@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { AssetType, ComplianceStatus, FindingSeverity, LicenseType, ProjectUsage } from "@prisma/client";
 import { serverEnv } from "@/lib/env";
 import { PLATFORM_LABELS } from "@/lib/labels";
+import { hasFeature } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { auditIsStale, checkCompliance } from "@/server/services/compliance";
 
@@ -30,8 +31,17 @@ export type PassportAsset = {
   notes: string[];
 };
 
+export type PassportBrand = {
+  whiteLabel: boolean; // vrai : aucune mention de Licensio, nom et couleur de l'agence
+  name: string;
+  color: string;
+};
+
+export const DEFAULT_BRAND_COLOR = "#171717";
+
 export type Passport = {
   token: string;
+  brand: PassportBrand;
   url: string;
   projectName: string;
   clientName: string | null;
@@ -53,9 +63,10 @@ export async function loadPassport(token: string): Promise<Passport | null> {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
   const head = await prisma.project.findUnique({
     where: { passportToken: token },
-    select: { id: true, workspaceId: true, passportEnabled: true, lastAuditAt: true },
+    select: { id: true, workspaceId: true, passportEnabled: true, lastAuditAt: true, workspace: { select: { plan: true } } },
   });
-  if (!head?.passportEnabled) return null;
+  // Lien désactivé, ou espace repassé à un plan sans passeport : le lien ne répond plus.
+  if (!head?.passportEnabled || !hasFeature(head.workspace.plan, "passport")) return null;
 
   // Un passeport ne doit jamais présenter une licence expirée depuis comme valide.
   if (auditIsStale(head.lastAuditAt)) await checkCompliance(head.id, head.workspaceId);
@@ -63,7 +74,7 @@ export async function loadPassport(token: string): Promise<Passport | null> {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: head.id },
     include: {
-      workspace: { select: { name: true } },
+      workspace: { select: { name: true, plan: true, brandName: true, brandColor: true } },
       assets: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -110,12 +121,18 @@ export async function loadPassport(token: string): Promise<Passport | null> {
   });
   assets.sort((x, y) => SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity]);
 
+  const whiteLabel = hasFeature(project.workspace.plan, "whiteLabel");
   return {
     token,
+    brand: {
+      whiteLabel,
+      name: (whiteLabel && project.workspace.brandName) || project.workspace.name,
+      color: (whiteLabel && project.workspace.brandColor) || DEFAULT_BRAND_COLOR,
+    },
     url: passportUrl(token),
     projectName: project.name,
     clientName: project.clientName,
-    issuer: project.workspace.name,
+    issuer: (whiteLabel && project.workspace.brandName) || project.workspace.name,
     usage: project.usage,
     publishedAt: project.publishedAt,
     status: project.complianceStatus,

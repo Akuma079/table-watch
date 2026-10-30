@@ -20,6 +20,8 @@ import { passportUrl } from "@/server/passport/data";
 import { AddAssetsForm } from "@/components/projects/AddAssetsForm";
 import { LinkLicenseSelect } from "@/components/projects/LinkLicenseSelect";
 import { PassportPanel } from "@/components/projects/PassportPanel";
+import { UpgradeNotice } from "@/components/billing/UpgradeNotice";
+import { hasFeature } from "@/lib/plans";
 import { recommendationFor } from "@/components/projects/recommendations";
 import { ComplianceBadge, SEVERITY_STATUS } from "@/components/projects/StatusBadges";
 import { Alert } from "@/components/ui/Alert";
@@ -249,12 +251,19 @@ export default async function ProjectPage({
 
       <section className="mb-10 rounded-xl border border-neutral-200 bg-white p-6">
         <h2 className="mb-2 font-medium">Passeport de Droits</h2>
-        <PassportPanel
-          projectId={project.id}
-          url={project.passportEnabled && project.passportToken ? passportUrl(project.passportToken) : null}
-          status={project.complianceStatus}
-          canEdit={canEdit}
-        />
+        {hasFeature(workspace.plan, "passport") ? (
+          <PassportPanel
+            projectId={project.id}
+            url={project.passportEnabled && project.passportToken ? passportUrl(project.passportToken) : null}
+            status={project.complianceStatus}
+            canEdit={canEdit}
+          />
+        ) : (
+          <UpgradeNotice title="Remettez un Passeport de Droits à votre client" canManage={hasRole(role, "ADMIN")}>
+            Un certificat public et un PDF, à votre marque, qui listent chaque ressource et son identifiant de licence. Inclus dans
+            le plan Agence.
+          </UpgradeNotice>
+        )}
       </section>
 
       {canEdit && (

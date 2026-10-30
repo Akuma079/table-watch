@@ -15,7 +15,7 @@ npm install
 npm run db:migrate            # applique prisma/migrations
 npm run storage:setup         # crée le bucket privé des preuves de licence
 npm run dev                   # http://localhost:3000
-npm test                      # règles d'audit
+npm test                      # règles d'audit et d'abonnement
 npm run worker                # dans un 2e terminal : traitement média / OCR (simulé)
 ```
 
@@ -144,6 +144,43 @@ Certificat public d'un projet, à transmettre au client final.
   peut pas rester affichée comme valide).
 - **Confidentialité** : `noindex`, `no-referrer` (le jeton ne fuit pas vers d'autres sites).
 
+## Abonnements (Stripe)
+
+| | Creator | Agence |
+|---|---|---|
+| Prix | gratuit | 79 €/mois (Stripe) |
+| Projets / licences | 5 / 50 | illimités |
+| Utilisateurs | 1 | illimités |
+| Passeport de Droits | — | ✓, en marque blanche |
+
+Forfaits définis dans `src/lib/plans.ts` (source unique : limites, fonctionnalités, page
+`/pricing`). L'abonnement est porté par l'**espace de travail**, pas par l'utilisateur.
+
+**Mise en place**
+1. Dans Stripe, créer un produit « Licensio Agence » avec un prix mensuel de 79 € ; mettre
+   son ID dans `STRIPE_PRICE_AGENCY`, et la clé secrète dans `STRIPE_SECRET_KEY`.
+2. Créer un webhook vers `https://<app>/api/stripe/webhook` avec les événements
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted` ; mettre son secret
+   dans `STRIPE_WEBHOOK_SECRET`. En local : `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+3. Activer le portail client (Stripe → Paramètres → Billing → Customer portal) :
+   moyen de paiement, factures, résiliation.
+
+Sans variables Stripe, l'app fonctionne entièrement en plan Creator.
+
+**Fonctionnement**
+- `/pricing` (public) → Checkout → retour par `/api/billing/return`, qui synchronise
+  l'abonnement avant l'affichage. Le webhook reste la source de vérité.
+- Chaque événement relit l'abonnement chez Stripe (jamais le contenu de l'événement, qui
+  peut arriver dans le désordre). Statuts donnant droit au plan Agence : `active`,
+  `trialing`, `past_due` (délai de relance de Stripe). Un événement tardif d'un ancien
+  abonnement ne rétrograde pas l'espace.
+- Limites appliquées **côté serveur** dans chaque action (création de projet, de licence,
+  invitation, acceptation d'invitation, activation du passeport) ; l'interface ne fait
+  qu'informer.
+- Retour au plan Creator : rien n'est supprimé ; création bloquée au-delà des limites,
+  liens de passeport inactifs jusqu'au retour au plan Agence.
+
 ## Arborescence
 
 ✅ = en place · ⏳ = étape suivante
@@ -172,11 +209,16 @@ licensio/
 │  │  ├─ (app)/vault/new/page.tsx      ✅ formulaire + glisser-déposer
 │  │  ├─ api/documents/[id]/route.ts   ✅ aperçu / téléchargement (URL signée)
 │  │  ├─ passport/[token]/page.tsx     ✅ Passeport de Droits public
-│  │  └─ passport/[token]/pdf/route.tsx ✅ export PDF
+│  │  ├─ passport/[token]/pdf/route.tsx ✅ export PDF
+│  │  ├─ pricing/page.tsx              ✅ tarifs (public)
+│  │  ├─ (app)/settings/billing        ✅ mon abonnement, usage, marque blanche
+│  │  ├─ api/stripe/webhook/route.ts   ✅ webhook Stripe signé
+│  │  └─ api/billing/return/route.ts   ✅ retour de Checkout
 │  ├─ components/                      ✅ ui/, auth/, app/, workspace/, vault/, projects/, passport/
 │  ├─ lib/
 │  │  ├─ env.ts, prisma.ts, redirect.ts, slug.ts, labels.ts, cn.ts ✅
 │  │  ├─ documents.ts                  ✅ types et tailles acceptés
+│  │  ├─ plans.ts                      ✅ forfaits, limites, fonctionnalités
 │  │  ├─ asset-parse.ts                ✅ analyse des listes collées (liens Artlist, Envato…)
 │  │  └─ supabase/{client,server,middleware}.ts ✅
 │  └─ server/
@@ -191,6 +233,9 @@ licensio/
 │     ├─ services/compliance-rules.ts  ✅ règles d'audit (pures, testées)
 │     ├─ services/compliance.ts        ✅ checkCompliance (chargement + enregistrement)
 │     ├─ passport/data.ts              ✅ données publiques du passeport, jetons
+│     ├─ billing/subscription.ts       ✅ abonnement Stripe → plan (pur, testé)
+│     ├─ billing/stripe.ts             ✅ client Stripe, synchronisation
+│     ├─ actions/billing.ts            ✅ Checkout, portail client, marque blanche
 │     ├─ passport/PassportDocument.tsx ✅ mise en page du PDF
 │     ├─ processing/fingerprint.ts     ✅ placeholder empreinte audio
 │     ├─ processing/ocr.ts             ✅ placeholder OCR

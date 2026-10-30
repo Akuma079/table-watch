@@ -45,12 +45,30 @@ model Workspace {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Abonnement : porté par l'espace (une agence paie pour son espace, pas par personne).
+  // `plan` est le droit effectif, recalculé à chaque événement Stripe.
+  plan                 WorkspacePlan @default(CREATOR)
+  stripeCustomerId     String?       @unique
+  stripeSubscriptionId String?       @unique
+  subscriptionStatus   String? // statut Stripe brut : active, trialing, past_due, canceled…
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean       @default(false)
+
+  // Marque blanche du Passeport de Droits (plan Agence)
+  brandName  String? // à défaut : le nom de l'espace
+  brandColor String? // couleur d'accent, #RRGGBB
+
   members     Membership[]
   invitations Invitation[]
   licenses    License[]
   projects    Project[]
 
   @@map("workspaces")
+}
+
+enum WorkspacePlan {
+  CREATOR // gratuit : 5 projets, 50 licences, 1 membre, pas de passeport
+  AGENCY // payant : illimité, passeport en marque blanche, multi-utilisateurs
 }
 
 // OWNER : tout, dont la gestion des membres ; un seul par espace (le créateur).

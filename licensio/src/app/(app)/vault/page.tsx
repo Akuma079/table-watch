@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { LicenseType, Platform, Prisma } from "@prisma/client";
 import { DOCUMENT_MAX_FILES } from "@/lib/documents";
+import { PLANS } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { dayFormat, DOCUMENT_KIND_LABELS, LICENSE_TYPE_LABELS, PLATFORM_LABELS, ASSET_TYPE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
@@ -56,7 +57,11 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="Coffre-fort"
-        description={`${total} licence${total > 1 ? "s" : ""} · ${workspace.name}`}
+        description={
+          PLANS[workspace.plan].limits.licenses
+            ? `${total} / ${PLANS[workspace.plan].limits.licenses} licences (plan ${PLANS[workspace.plan].name}) · ${workspace.name}`
+            : `${total} licence${total > 1 ? "s" : ""} · ${workspace.name}`
+        }
         actions={
           canEdit && (
             <Link href="/vault/new" className={buttonClass("primary")}>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PROJECT_USAGE_LABELS } from "@/lib/labels";
+import { PLANS } from "@/lib/plans";
 import { hasRole, requireWorkspace } from "@/server/auth";
 import { ComplianceBadge } from "@/components/projects/StatusBadges";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -36,7 +37,11 @@ export default async function ProjectsPage() {
     <>
       <PageHeader
         title="Projets"
-        description="Vidéos et podcasts audités dans cet espace."
+        description={
+          PLANS[workspace.plan].limits.projects
+            ? `${projects.length} / ${PLANS[workspace.plan].limits.projects} projets (plan ${PLANS[workspace.plan].name})`
+            : "Vidéos et podcasts audités dans cet espace."
+        }
         actions={
           canEdit && (
             <Link href="/projects/new" className={buttonClass("primary")}>

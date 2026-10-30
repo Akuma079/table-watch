@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { MAX_ASSETS_PER_PROJECT } from "@/lib/asset-parse";
+import { hasFeature, limitMessage, limitReached } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { ForbiddenError, requireWorkspaceRole } from "@/server/auth";
 import { getMediaQueue } from "@/server/queue/queues";
@@ -115,6 +116,11 @@ export async function createProject(_prev: FormState, formData: FormData): Promi
   const values = Object.fromEntries(PROJECT_FIELDS.map((k) => [k, str(formData, k)]));
   const { ctx, error } = await memberContext();
   if (!ctx) return { error, values };
+
+  const projectCount = await prisma.project.count({ where: { workspaceId: ctx.workspace.id } });
+  if (limitReached(ctx.workspace.plan, "projects", projectCount)) {
+    return { error: limitMessage(ctx.workspace.plan, "projects"), values };
+  }
 
   const parsed = projectInput.safeParse(values);
   const assets = parseAssets(str(formData, "assets"));
@@ -253,6 +259,9 @@ export async function enablePassport(projectId: string): Promise<PassportLinkRes
     select: { id: true, passportToken: true },
   });
   if (!project) return { error: "Projet introuvable." };
+  if (!hasFeature(ctx.workspace.plan, "passport")) {
+    return { error: "Le Passeport de Droits est inclus dans le plan Agence." };
+  }
 
   const token = project.passportToken ?? newPassportToken();
   await prisma.project.update({ where: { id: project.id }, data: { passportToken: token, passportEnabled: true } });
@@ -272,7 +281,7 @@ export async function disablePassport(formData: FormData) {
 export async function regeneratePassport(formData: FormData) {
   const ctx = await requireWorkspaceRole("MEMBER");
   const project = await projectOf(str(formData, "projectId"), ctx.workspace.id);
-  if (!project) return;
+  if (!project || !hasFeature(ctx.workspace.plan, "passport")) return;
   await prisma.project.update({
     where: { id: project.id },
     data: { passportToken: newPassportToken(), passportEnabled: true },

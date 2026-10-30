@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { DOCUMENT_MAX_BYTES, DOCUMENT_MAX_FILES, isAllowedDocumentType } from "@/lib/documents";
+import { limitMessage, limitReached } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { safeNextPath } from "@/lib/redirect";
 import { ForbiddenError, requireWorkspaceRole } from "@/server/auth";
@@ -177,6 +178,11 @@ export async function createLicense(_prev: FormState, formData: FormData): Promi
   } catch (e) {
     if (e instanceof ForbiddenError) return { error: e.message, values };
     throw e;
+  }
+
+  const licenseCount = await prisma.license.count({ where: { workspaceId: ctx.workspace.id } });
+  if (limitReached(ctx.workspace.plan, "licenses", licenseCount)) {
+    return { error: limitMessage(ctx.workspace.plan, "licenses"), values };
   }
 
   const parsed = licenseInput.safeParse({ ...values, documents: parseDocuments(str(formData, "documents")) });

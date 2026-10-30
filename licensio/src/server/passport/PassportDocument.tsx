@@ -80,9 +80,16 @@ export function PassportDocument({ passport: p, qrDataUrl, generatedAt }: { pass
   ];
 
   return (
-    <Document title={`Passeport de Droits — ${p.projectName}`} author={p.issuer} creator="Licensio" producer="Licensio" language="fr">
+    <Document
+      title={`Passeport de Droits — ${p.projectName}`}
+      author={p.issuer}
+      creator={p.brand.whiteLabel ? p.brand.name : "Licensio"}
+      producer={p.brand.whiteLabel ? p.brand.name : "Licensio"}
+      language="fr"
+    >
       <Page size="A4" style={s.page}>
-        <Text style={s.brand}>LICENSIO</Text>
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, backgroundColor: p.brand.color }} fixed />
+        <Text style={[s.brand, { color: p.brand.color }]}>{(p.brand.whiteLabel ? p.brand.name : "Licensio").toUpperCase()}</Text>
         <Text style={s.kicker}>PASSEPORT DE DROITS</Text>
         <Text style={s.title}>{p.projectName}</Text>
 
@@ -141,7 +148,7 @@ export function PassportDocument({ passport: p, qrDataUrl, generatedAt }: { pass
             <Text style={s.footLine}>{p.url}</Text>
             <Text style={[s.footLine, { marginTop: 4 }]}>
               Ce passeport recoupe les ressources déclarées par {p.issuer} avec les licences et preuves d&apos;achat enregistrées dans
-              son coffre-fort Licensio, à la date de vérification. Il ne remplace pas les conditions de licence des plateformes, qui font foi.
+              son coffre-fort {p.brand.whiteLabel ? "de licences" : "Licensio"}, à la date de vérification. Il ne remplace pas les conditions de licence des plateformes, qui font foi.
             </Text>
             <Text
               style={{ marginTop: 4 }}
