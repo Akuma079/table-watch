@@ -16,8 +16,10 @@ import {
 import { hasRole, requireWorkspace } from "@/server/auth";
 import { deleteProject, removeProjectAsset, runProjectAudit } from "@/server/actions/projects";
 import { auditIsStale, checkCompliance } from "@/server/services/compliance";
+import { passportUrl } from "@/server/passport/data";
 import { AddAssetsForm } from "@/components/projects/AddAssetsForm";
 import { LinkLicenseSelect } from "@/components/projects/LinkLicenseSelect";
+import { PassportPanel } from "@/components/projects/PassportPanel";
 import { recommendationFor } from "@/components/projects/recommendations";
 import { ComplianceBadge, SEVERITY_STATUS } from "@/components/projects/StatusBadges";
 import { Alert } from "@/components/ui/Alert";
@@ -243,6 +245,16 @@ export default async function ProjectPage({
             })}
           </ul>
         )}
+      </section>
+
+      <section className="mb-10 rounded-xl border border-neutral-200 bg-white p-6">
+        <h2 className="mb-2 font-medium">Passeport de Droits</h2>
+        <PassportPanel
+          projectId={project.id}
+          url={project.passportEnabled && project.passportToken ? passportUrl(project.passportToken) : null}
+          status={project.complianceStatus}
+          canEdit={canEdit}
+        />
       </section>
 
       {canEdit && (

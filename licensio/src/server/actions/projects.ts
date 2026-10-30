@@ -10,6 +10,7 @@ import { ForbiddenError, requireWorkspaceRole } from "@/server/auth";
 import { getMediaQueue } from "@/server/queue/queues";
 import { checkCompliance } from "@/server/services/compliance";
 import { normalizeAssetName } from "@/server/services/normalize";
+import { newPassportToken, passportUrl } from "@/server/passport/data";
 import { fieldErrors, str } from "./form";
 import type { FormState } from "./types";
 
@@ -237,4 +238,44 @@ export async function deleteProject(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/dashboard");
   redirect("/projects");
+}
+
+// ───────── Passeport de Droits ─────────
+
+export type PassportLinkResult = { url: string } | { error: string };
+
+// Active le lien public (en le créant au besoin) et renvoie son URL pour la copier.
+export async function enablePassport(projectId: string): Promise<PassportLinkResult> {
+  const { ctx, error } = await memberContext();
+  if (!ctx) return { error: error ?? "Accès refusé." };
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: ctx.workspace.id },
+    select: { id: true, passportToken: true },
+  });
+  if (!project) return { error: "Projet introuvable." };
+
+  const token = project.passportToken ?? newPassportToken();
+  await prisma.project.update({ where: { id: project.id }, data: { passportToken: token, passportEnabled: true } });
+  revalidatePath(`/projects/${project.id}`);
+  return { url: passportUrl(token) };
+}
+
+export async function disablePassport(formData: FormData) {
+  const ctx = await requireWorkspaceRole("MEMBER");
+  const project = await projectOf(str(formData, "projectId"), ctx.workspace.id);
+  if (!project) return;
+  await prisma.project.update({ where: { id: project.id }, data: { passportEnabled: false } });
+  revalidatePath(`/projects/${project.id}`);
+}
+
+// Nouveau jeton : l'ancien lien cesse aussitôt de fonctionner (lien transmis par erreur…).
+export async function regeneratePassport(formData: FormData) {
+  const ctx = await requireWorkspaceRole("MEMBER");
+  const project = await projectOf(str(formData, "projectId"), ctx.workspace.id);
+  if (!project) return;
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { passportToken: newPassportToken(), passportEnabled: true },
+  });
+  revalidatePath(`/projects/${project.id}`);
 }

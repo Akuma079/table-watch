@@ -6,7 +6,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Chargés par Node à l'exécution plutôt qu'embarqués par webpack (BullMQ référence des
   // dépendances optionnelles, comme @valkey/valkey-glide, qui ne sont pas installées).
-  serverExternalPackages: ["bullmq", "ioredis"],
+  serverExternalPackages: ["bullmq", "ioredis", "@react-pdf/renderer"],
 };
 
 export default nextConfig;

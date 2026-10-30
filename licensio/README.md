@@ -125,6 +125,25 @@ Hypothèse à valider : une licence valable à la date de diffusion couvre la vi
 expire ensuite (cas d'Envato Elements, Artlist…). Certaines licences exigent au contraire
 d'être actives pendant toute l'exploitation : à affiner par plateforme.
 
+## Passeport de Droits
+
+Certificat public d'un projet, à transmettre au client final.
+
+- **Lien** : `/passport/<jeton>` (192 bits aléatoires), sans connexion. Créé et copié en un
+  clic depuis la page du projet (« Copier le lien public client »), désactivable, et
+  régénérable (l'ancien lien cesse aussitôt de fonctionner). Jeton invalide ou lien
+  désactivé : 404.
+- **PDF** : `/passport/<jeton>/pdf`, généré par `@react-pdf/renderer` (A4, police
+  Helvetica intégrée), avec un QR code vers la version en ligne.
+- **Contenu** : projet, client, espace émetteur, usage, date de diffusion, date et n° de
+  vérification, ressources avec plateforme, type et identifiant de licence, dates de validité.
+  Jamais exposés : factures, notes internes, liens sources.
+- **Intégrité** : le badge « Vérifié & conforme » n'apparaît que si le projet est vert ;
+  sinon « Conforme, avec réserves » ou « Non conforme », avec les constats. Un audit d'un
+  jour précédent est recalculé à l'ouverture du passeport (une licence expirée depuis ne
+  peut pas rester affichée comme valide).
+- **Confidentialité** : `noindex`, `no-referrer` (le jeton ne fuit pas vers d'autres sites).
+
 ## Arborescence
 
 ✅ = en place · ⏳ = étape suivante
@@ -152,9 +171,9 @@ licensio/
 │  │  ├─ (app)/vault/page.tsx          ✅ liste, recherche, filtres, aperçu, téléchargement
 │  │  ├─ (app)/vault/new/page.tsx      ✅ formulaire + glisser-déposer
 │  │  ├─ api/documents/[id]/route.ts   ✅ aperçu / téléchargement (URL signée)
-│  │  ├─ passport/[token]/page.tsx     ⏳ Passeport de Droits public
-│  │  └─ passport/[token]/pdf/route.ts ⏳ export PDF
-│  ├─ components/                      ✅ ui/, auth/, app/, workspace/, vault/
+│  │  ├─ passport/[token]/page.tsx     ✅ Passeport de Droits public
+│  │  └─ passport/[token]/pdf/route.tsx ✅ export PDF
+│  ├─ components/                      ✅ ui/, auth/, app/, workspace/, vault/, projects/, passport/
 │  ├─ lib/
 │  │  ├─ env.ts, prisma.ts, redirect.ts, slug.ts, labels.ts, cn.ts ✅
 │  │  ├─ documents.ts                  ✅ types et tailles acceptés
@@ -171,6 +190,8 @@ licensio/
 │     ├─ services/normalize.ts         ✅ normalisation des noms
 │     ├─ services/compliance-rules.ts  ✅ règles d'audit (pures, testées)
 │     ├─ services/compliance.ts        ✅ checkCompliance (chargement + enregistrement)
+│     ├─ passport/data.ts              ✅ données publiques du passeport, jetons
+│     ├─ passport/PassportDocument.tsx ✅ mise en page du PDF
 │     ├─ processing/fingerprint.ts     ✅ placeholder empreinte audio
 │     ├─ processing/ocr.ts             ✅ placeholder OCR
 │     └─ queue/{connection,queues,worker}.ts ✅ BullMQ
