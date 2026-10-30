@@ -39,15 +39,17 @@ function SelectField({
   );
 }
 
-export function LicenseForm() {
+// `initial` : valeurs pré-remplies (depuis une recommandation d'audit) ; `returnTo` : projet
+// vers lequel revenir après l'enregistrement.
+export function LicenseForm({ initial = {}, returnTo }: { initial?: Record<string, string>; returnTo?: string }) {
   const [state, action, pending] = useActionState(createLicense, initialFormState);
-  const [platform, setPlatform] = useState<Platform | "">("");
+  const [platform, setPlatform] = useState<Platform | "">((initial.platform as Platform) ?? "");
   const [upload, setUpload] = useState<{ documents: UploadedDocument[]; uploading: boolean }>({
     documents: [],
     uploading: false,
   });
   const onUploadChange = useCallback((s: typeof upload) => setUpload(s), []);
-  const v = state.values ?? {};
+  const v = state.values ?? initial;
   const err = state.fieldErrors ?? {};
   const today = new Date().toISOString().slice(0, 10);
 
@@ -65,6 +67,7 @@ export function LicenseForm() {
     >
       {state.error && <Alert tone="error">{state.error}</Alert>}
       <input type="hidden" name="documents" value={JSON.stringify(upload.documents)} />
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
 
       <section className="space-y-4">
         <h2 className="font-medium">Ressource</h2>
@@ -206,7 +209,7 @@ export function LicenseForm() {
       </section>
 
       <div className="flex items-center justify-end gap-3 border-t border-neutral-200 pt-6">
-        <Link href="/vault" className={buttonClass("ghost")}>
+        <Link href={returnTo ?? "/vault"} className={buttonClass("ghost")}>
           Annuler
         </Link>
         <button type="submit" disabled={pending || upload.uploading} className={buttonClass("primary")}>

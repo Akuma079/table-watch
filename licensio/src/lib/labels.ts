@@ -1,4 +1,13 @@
-import type { AssetType, DocumentKind, LicenseType, Platform, WorkspaceRole } from "@prisma/client";
+import type {
+  AssetType,
+  ComplianceStatus,
+  DocumentKind,
+  FindingCode,
+  LicenseType,
+  Platform,
+  ProjectUsage,
+  WorkspaceRole,
+} from "@prisma/client";
 
 export const ROLE_LABELS: Record<WorkspaceRole, string> = {
   OWNER: "Propriétaire",
@@ -60,3 +69,34 @@ export const dayFormat = new Intl.DateTimeFormat("fr-BE", {
   year: "numeric",
   timeZone: "UTC",
 });
+
+export const PROJECT_USAGE_LABELS: Record<ProjectUsage, string> = {
+  PERSONAL: "Personnel",
+  COMMERCIAL: "Commercial",
+  BROADCAST: "Diffusion TV / pub payante",
+};
+
+export const PROJECT_USAGE_HINTS: Record<ProjectUsage, string> = {
+  PERSONAL: "Vidéo perso, non monétisée. Toute licence suffit.",
+  COMMERCIAL: "Client, chaîne monétisée, réseaux sociaux d'une marque, pub en ligne. Licence commerciale requise.",
+  BROADCAST: "Télévision, cinéma, campagne publicitaire payante. Licence étendue requise.",
+};
+
+export const COMPLIANCE_LABELS: Record<ComplianceStatus, string> = {
+  COMPLIANT: "Conforme",
+  WARNING: "Attention",
+  NON_COMPLIANT: "Non conforme",
+  PENDING: "En attente",
+};
+
+export const FINDING_LABELS: Record<FindingCode, string> = {
+  LICENSED: "Licence valide",
+  MISSING_LICENSE: "Licence manquante",
+  LICENSE_EXPIRED: "Licence expirée",
+  LICENSE_REVOKED: "Licence révoquée",
+  LICENSE_TYPE_INSUFFICIENT: "Licence inadaptée",
+  PLATFORM_MISMATCH: "Plateforme différente",
+  MISSING_PROOF: "Preuve manquante",
+  LICENSE_EXPIRING_SOON: "Expire bientôt",
+  LICENSE_RESTRICTED: "À vérifier",
+};

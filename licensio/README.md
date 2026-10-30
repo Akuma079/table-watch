@@ -15,6 +15,7 @@ npm install
 npm run db:migrate            # applique prisma/migrations
 npm run storage:setup         # crée le bucket privé des preuves de licence
 npm run dev                   # http://localhost:3000
+npm test                      # règles d'audit
 npm run worker                # dans un 2e terminal : traitement média / OCR (simulé)
 ```
 
@@ -90,8 +91,39 @@ User ── Membership ── Workspace ─┬─ License ── LicenseDocument
 Limites actuelles :
 - un fichier envoyé puis abandonné (formulaire jamais validé) reste dans le bucket ; un
   nettoyage périodique des fichiers non rattachés est à prévoir ;
-- on ne peut pas encore ajouter de preuve à une licence existante, ni la modifier ;
+- une licence ne peut pas encore être modifiée (seulement complétée par des preuves) ;
 - l'OCR (simulé) n'est déclenché que si `PROCESSING_QUEUE_ENABLED="true"`.
+
+## Moteur d'audit
+
+`checkCompliance(projectId, workspaceId)` (`src/server/services/compliance.ts`) compare chaque
+ressource déclarée du projet aux licences du coffre-fort du même espace, enregistre un
+`AuditRun` (historique, score, constats) et met à jour le statut du projet. Les règles sont
+des fonctions pures dans `compliance-rules.ts`, couvertes par `npm test`.
+
+**Correspondance** (par ordre de priorité) : licence associée à la main → même lien de
+ressource → même titre normalisé (accents, casse et ponctuation ignorés ; « titre artiste »
+accepté). À plateforme égale de préférence ; parmi plusieurs licences, la meilleure est retenue.
+
+| Constat | Gravité |
+|---|---|
+| Aucune licence trouvée | 🔴 |
+| Licence personnelle sur projet commercial / diffusion | 🔴 |
+| Licence commerciale sur projet diffusion (TV, cinéma, pub payante) | 🔴 |
+| Licence expirée (à la date de diffusion si renseignée, sinon aujourd'hui) ou révoquée | 🔴 |
+| Expire dans les 30 jours, projet pas encore diffusé | 🟡 |
+| Utilité restreinte (conditions à relire), aucune preuve jointe, plateforme différente | 🟡 |
+
+Statut du projet : rouge si une ressource est rouge, sinon orange si une est orange, sinon
+vert. Score = part des ressources couvertes (une ressource orange compte pour moitié).
+
+Recalcul : à chaque modification du projet, à chaque ajout/suppression de licence ou de
+preuve (tous les projets de l'espace), et à l'ouverture d'un projet audité un jour précédent
+(les expirations dépendent de la date).
+
+Hypothèse à valider : une licence valable à la date de diffusion couvre la vidéo même si elle
+expire ensuite (cas d'Envato Elements, Artlist…). Certaines licences exigent au contraire
+d'être actives pendant toute l'exploitation : à affiner par plateforme.
 
 ## Arborescence
 
@@ -114,7 +146,9 @@ licensio/
 │  │  ├─ (app)/layout.tsx              ✅ barre latérale, sélecteur d'espace
 │  │  ├─ (app)/dashboard/page.tsx      ✅ compteurs (version simple)
 │  │  ├─ (app)/settings/members        ✅ membres, rôles, invitations
-│  │  ├─ (app)/projects/page.tsx       ✅ liste simple · ⏳ création, détail, audit
+│  │  ├─ (app)/projects/page.tsx       ✅ liste triée par gravité, score
+│  │  ├─ (app)/projects/new/page.tsx   ✅ création + ressources (saisie ou liste collée)
+│  │  ├─ (app)/projects/[id]/page.tsx  ✅ rapport d'audit, recommandations, association manuelle
 │  │  ├─ (app)/vault/page.tsx          ✅ liste, recherche, filtres, aperçu, téléchargement
 │  │  ├─ (app)/vault/new/page.tsx      ✅ formulaire + glisser-déposer
 │  │  ├─ api/documents/[id]/route.ts   ✅ aperçu / téléchargement (URL signée)
@@ -124,6 +158,7 @@ licensio/
 │  ├─ lib/
 │  │  ├─ env.ts, prisma.ts, redirect.ts, slug.ts, labels.ts, cn.ts ✅
 │  │  ├─ documents.ts                  ✅ types et tailles acceptés
+│  │  ├─ asset-parse.ts                ✅ analyse des listes collées (liens Artlist, Envato…)
 │  │  └─ supabase/{client,server,middleware}.ts ✅
 │  └─ server/
 │     ├─ auth.ts                       ✅ utilisateur, espace actif, rôles
@@ -132,9 +167,10 @@ licensio/
 │     ├─ actions/workspaces.ts         ✅ espaces, invitations, membres
 │     ├─ storage.ts                    ✅ URLs signées, vérification, suppression
 │     ├─ actions/licenses.ts           ✅ envoi, création, suppression de licences
-│     ├─ actions/projects.ts           ⏳ projet, médias, ressources déclarées
+│     ├─ actions/projects.ts           ✅ projet, ressources, association, audit
 │     ├─ services/normalize.ts         ✅ normalisation des noms
-│     ├─ services/compliance.ts        ⏳ correspondance + contrôle de conformité
+│     ├─ services/compliance-rules.ts  ✅ règles d'audit (pures, testées)
+│     ├─ services/compliance.ts        ✅ checkCompliance (chargement + enregistrement)
 │     ├─ processing/fingerprint.ts     ✅ placeholder empreinte audio
 │     ├─ processing/ocr.ts             ✅ placeholder OCR
 │     └─ queue/{connection,queues,worker}.ts ✅ BullMQ

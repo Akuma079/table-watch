@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { LicenseType, Platform, Prisma } from "@prisma/client";
+import { DOCUMENT_MAX_FILES } from "@/lib/documents";
 import { prisma } from "@/lib/prisma";
 import { dayFormat, DOCUMENT_KIND_LABELS, LICENSE_TYPE_LABELS, PLATFORM_LABELS, ASSET_TYPE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
+import { AttachDocumentsForm } from "@/components/vault/AttachDocumentsForm";
 import { DeleteLicenseButton } from "@/components/vault/DeleteLicenseButton";
 import { DocumentLinks } from "@/components/vault/DocumentLinks";
 import { ExpiryBadge, LicenseTypeBadge } from "@/components/vault/LicenseBadges";
@@ -164,7 +166,12 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
               </div>
 
               {canEdit && (
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    {l.documents.length < DOCUMENT_MAX_FILES && (
+                      <AttachDocumentsForm licenseId={l.id} defaultOpen={l.documents.length === 0 && licenses.length === 1} />
+                    )}
+                  </div>
                   <DeleteLicenseButton licenseId={l.id} assetName={l.assetName} />
                 </div>
               )}

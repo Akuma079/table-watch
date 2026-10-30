@@ -8,3 +8,13 @@ export function normalizeAssetName(name: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
+
+// Lien comparable : sans protocole, « www. », paramètres, ancre ni « / » final.
+export function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url.trim());
+    return `${u.hostname.replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}`.toLowerCase();
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}
