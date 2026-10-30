@@ -29,6 +29,7 @@ import { Alert } from "@/components/ui/Alert";
 import { buttonClass } from "@/components/ui/button-styles";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SubmitButton } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Projet" };
 
@@ -45,7 +46,7 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ licenseAdded?: string }>;
+  searchParams: Promise<{ licenseAdded?: string; updated?: string }>;
 }) {
   const { id } = await params;
   const { workspace, role } = await requireWorkspace();
@@ -95,6 +96,7 @@ export default async function ProjectPage({
     label: `${l.assetName}${l.author ? ` — ${l.author}` : ""} · ${PLATFORM_LABELS[l.platform]} · ${LICENSE_TYPE_LABELS[l.licenseType]}`,
   }));
   const media = project.media[0];
+  const query = await searchParams;
 
   return (
     <>
@@ -102,9 +104,14 @@ export default async function ProjectPage({
         ← Projets
       </Link>
 
-      {(await searchParams).licenseAdded && (
+      {query.licenseAdded && (
         <div className="mb-6">
           <Alert tone="success">Licence ajoutée au coffre-fort : l&apos;audit a été relancé.</Alert>
+        </div>
+      )}
+      {query.updated && (
+        <div className="mb-6">
+          <Alert tone="success">Projet modifié : l&apos;audit a été relancé.</Alert>
         </div>
       )}
 
@@ -134,12 +141,19 @@ export default async function ProjectPage({
           {project.lastAuditAt && (
             <p className="text-xs text-neutral-500">Dernier audit : {dateFormat.format(project.lastAuditAt)}, {project.lastAuditAt.toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" })}</p>
           )}
+          <div className="flex flex-wrap gap-2">
+          {canEdit && (
+            <Link href={`/projects/${project.id}/edit`} className={buttonClass("secondary", "py-1.5 text-xs")}>
+              Modifier
+            </Link>
+          )}
           <form action={runProjectAudit}>
             <input type="hidden" name="projectId" value={project.id} />
-            <button type="submit" className={buttonClass("secondary", "py-1.5 text-xs")}>
+            <SubmitButton variant={null} className={buttonClass("secondary", "py-1.5 text-xs")} pendingLabel="Audit en cours…">
               Relancer l&apos;audit
-            </button>
+            </SubmitButton>
           </form>
+          </div>
         </div>
       </header>
 
@@ -230,9 +244,9 @@ export default async function ProjectPage({
                             <form action={linkAssetLicense}>
                               <input type="hidden" name="assetId" value={asset.id} />
                               <input type="hidden" name="licenseId" value={l.id} />
-                              <button type="submit" className={buttonClass("secondary", "shrink-0 py-1.5 text-xs")}>
+                              <SubmitButton variant={null} className={buttonClass("secondary", "shrink-0 py-1.5 text-xs")} pendingLabel="Association…">
                                 Associer
-                              </button>
+                              </SubmitButton>
                             </form>
                           </li>
                         ))}
@@ -251,9 +265,12 @@ export default async function ProjectPage({
                         <form action={setRestrictedApproval}>
                           <input type="hidden" name="assetId" value={asset.id} />
                           <input type="hidden" name="approve" value={approved ? "" : "1"} />
-                          <button type="submit" className={buttonClass(approved ? "secondary" : "primary", "shrink-0 py-1.5 text-xs")}>
+                          <SubmitButton variant={null}
+                            className={buttonClass(approved ? "secondary" : "primary", "shrink-0 py-1.5 text-xs")}
+                            pendingLabel="Enregistrement…"
+                          >
                             {approved ? "Annuler la vérification" : "Conditions vérifiées pour ce projet"}
-                          </button>
+                          </SubmitButton>
                         </form>
                       )}
                     </div>
@@ -285,7 +302,8 @@ export default async function ProjectPage({
                           action={removeProjectAsset}
                           fields={{ assetId: asset.id }}
                           message={`Retirer « ${asset.assetName} » du projet ?`}
-                          className="text-xs text-red-600 hover:underline"
+                          className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                          pendingLabel="Retrait…"
                         >
                           Retirer
                         </ConfirmButton>
@@ -335,6 +353,7 @@ export default async function ProjectPage({
             fields={{ projectId: project.id }}
             message={`Supprimer le projet « ${project.name} » et son historique d'audit ?`}
             className={buttonClass("danger", "py-1.5 text-xs")}
+            pendingLabel="Suppression…"
           >
             Supprimer le projet
           </ConfirmButton>

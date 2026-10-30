@@ -163,6 +163,32 @@ export async function removeMember(formData: FormData) {
   revalidatePath("/settings/members");
 }
 
+export async function renameWorkspace(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = { name: str(formData, "name") };
+  let ctx;
+  try {
+    ctx = await requireWorkspaceRole("ADMIN");
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { error: e.message, values };
+    throw e;
+  }
+  const parsed = z.object({ name: z.string().trim().min(2, "2 caractères minimum.").max(80) }).safeParse(values);
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+  await prisma.workspace.update({ where: { id: ctx.workspace.id }, data: { name: parsed.data.name } });
+  revalidatePath("/", "layout");
+  return { success: "Nom de l'espace enregistré.", values: { name: parsed.data.name } };
+}
+
+// Quitter l'espace actif. Le propriétaire ne peut pas partir : l'espace (et son
+// abonnement) resterait sans responsable.
+export async function leaveWorkspace() {
+  const ctx = await requireWorkspaceRole("VIEWER");
+  if (ctx.role === "OWNER") return;
+  await prisma.membership.delete({ where: { userId_workspaceId: { userId: ctx.user.id, workspaceId: ctx.workspace.id } } });
+  (await cookies()).delete(ACTIVE_WORKSPACE_COOKIE);
+  redirect(ctx.workspaces.length > 1 ? "/dashboard" : "/workspaces/new");
+}
+
 export async function updateMemberRole(formData: FormData) {
   const ctx = await requireWorkspaceRole("OWNER");
   const role = z.enum(["ADMIN", "MEMBER", "VIEWER"]).safeParse(str(formData, "role"));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { useFormStatus } from "react-dom";
 import { linkAssetLicense } from "@/server/actions/projects";
 
 type Option = { id: string; label: string };
@@ -27,13 +28,13 @@ export function LinkLicenseSelect({
       <label htmlFor={`link-${assetId}`} className="shrink-0 text-xs text-neutral-500">
         Licence :
       </label>
-      <select
+      <LicenseSelect
         id={`link-${assetId}`}
         name="licenseId"
         defaultValue={manual && value ? value : ""}
         onChange={() => formRef.current?.requestSubmit()}
         aria-label={`Licence associée à ${assetName}`}
-        className="min-w-0 max-w-full flex-1 truncate rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs sm:max-w-xs"
+        className="min-w-0 max-w-full flex-1 truncate rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs disabled:opacity-60 sm:max-w-xs"
       >
         <option value="">Automatique (par titre)</option>
         {options.map((o) => (
@@ -41,7 +42,13 @@ export function LinkLicenseSelect({
             {o.label}
           </option>
         ))}
-      </select>
+      </LicenseSelect>
     </form>
   );
+}
+
+// Liste désactivée pendant l'enregistrement et le ré-audit.
+function LicenseSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const { pending } = useFormStatus();
+  return <select {...props} disabled={pending} aria-busy={pending || undefined} />;
 }

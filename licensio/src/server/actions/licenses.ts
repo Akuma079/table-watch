@@ -300,6 +300,7 @@ export async function deleteLicense(formData: FormData) {
   revalidatePath("/vault");
   revalidatePath("/projects", "layout");
   revalidatePath("/dashboard");
+  redirect(`/vault?deleted=${encodeURIComponent(license.assetName.slice(0, 120))}`);
 }
 
 // ───────── Preuves ajoutées à une licence existante ─────────

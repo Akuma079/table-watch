@@ -160,6 +160,44 @@ export async function createProject(_prev: FormState, formData: FormData): Promi
   redirect(`/projects/${project.id}`);
 }
 
+// Informations générales du projet. Les ressources se gèrent depuis la page du projet.
+// Usage et date de diffusion changent le résultat : le projet est ré-audité.
+export async function updateProject(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = Object.fromEntries(PROJECT_FIELDS.map((k) => [k, str(formData, k)]));
+  const { ctx, error } = await memberContext();
+  if (!ctx) return { error, values };
+  const project = await prisma.project.findFirst({
+    where: { id: str(formData, "projectId"), workspaceId: ctx.workspace.id },
+    select: { id: true, media: { where: { source: { not: "UPLOAD" } }, select: { id: true, externalUrl: true } } },
+  });
+  if (!project) return { error: "Projet introuvable.", values };
+
+  const parsed = projectInput.safeParse(values);
+  if (!parsed.success) return { error: "Certains champs sont à corriger.", fieldErrors: fieldErrors(parsed.error), values };
+  const data = parsed.data;
+
+  const currentUrl = project.media[0]?.externalUrl ?? null;
+  await prisma.$transaction([
+    prisma.project.update({
+      where: { id: project.id },
+      data: { name: data.name, clientName: data.clientName, usage: data.usage, publishedAt: data.publishedAt, description: data.description },
+    }),
+    // Lien de la vidéo modifié : l'ancien lien est remplacé.
+    ...(data.mediaUrl !== currentUrl
+      ? [
+          prisma.mediaFile.deleteMany({ where: { id: { in: project.media.map((m) => m.id) } } }),
+          ...(data.mediaUrl
+            ? [prisma.mediaFile.create({ data: { projectId: project.id, source: mediaSource(data.mediaUrl), externalUrl: data.mediaUrl } })]
+            : []),
+        ]
+      : []),
+  ]);
+
+  await checkCompliance(project.id, ctx.workspace.id);
+  refresh(project.id);
+  redirect(`/projects/${project.id}?updated=1`);
+}
+
 async function projectOf(projectId: string, workspaceId: string) {
   return prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } });
 }
@@ -266,10 +304,10 @@ export async function deleteProject(formData: FormData) {
   const ctx = await requireWorkspaceRole("MEMBER");
   const project = await projectOf(str(formData, "projectId"), ctx.workspace.id);
   if (!project) return;
-  await prisma.project.delete({ where: { id: project.id } });
+  const { name } = await prisma.project.delete({ where: { id: project.id }, select: { name: true } });
   revalidatePath("/projects");
   revalidatePath("/dashboard");
-  redirect("/projects");
+  redirect(`/projects?deleted=${encodeURIComponent(name.slice(0, 120))}`);
 }
 
 // ───────── Passeport de Droits ─────────

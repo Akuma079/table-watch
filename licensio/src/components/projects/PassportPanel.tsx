@@ -34,9 +34,13 @@ export function PassportPanel({
     startTransition(async () => {
       let link = url;
       if (!link) {
-        const res = await enablePassport(projectId);
-        if ("error" in res) return setError(res.error);
-        link = res.url;
+        try {
+          const res = await enablePassport(projectId);
+          if ("error" in res) return setError(res.error);
+          link = res.url;
+        } catch {
+          return setError("Le lien n'a pas pu être créé. Vérifiez votre connexion et réessayez.");
+        }
       }
       try {
         await navigator.clipboard.writeText(link);

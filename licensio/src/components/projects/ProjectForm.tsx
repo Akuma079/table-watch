@@ -5,7 +5,7 @@ import Link from "next/link";
 import { startTransition, useActionState, useCallback, useState } from "react";
 import type { ParsedAsset } from "@/lib/asset-parse";
 import { PROJECT_USAGE_HINTS, PROJECT_USAGE_LABELS } from "@/lib/labels";
-import { createProject } from "@/server/actions/projects";
+import { createProject, updateProject } from "@/server/actions/projects";
 import { initialFormState } from "@/server/actions/types";
 import { Alert } from "@/components/ui/Alert";
 import { buttonClass } from "@/components/ui/button-styles";
@@ -14,11 +14,13 @@ import { AssetEditor } from "./AssetEditor";
 
 const USAGES: ProjectUsage[] = ["COMMERCIAL", "BROADCAST", "PERSONAL"];
 
-export function ProjectForm() {
-  const [state, action, pending] = useActionState(createProject, initialFormState);
+// Sans `projectId` : création (avec les ressources) ; avec : modification des
+// informations générales, pré-remplies par `initial`.
+export function ProjectForm({ projectId, initial = {} }: { projectId?: string; initial?: Record<string, string> }) {
+  const [state, action, pending] = useActionState(projectId ? updateProject : createProject, initialFormState);
   const [assets, setAssets] = useState<ParsedAsset[]>([]);
   const onAssets = useCallback((a: ParsedAsset[]) => setAssets(a), []);
-  const v = state.values ?? {};
+  const v = state.values ?? initial;
   const err = state.fieldErrors ?? {};
 
   return (
@@ -32,7 +34,11 @@ export function ProjectForm() {
       }}
     >
       {state.error && <Alert tone="error">{state.error}</Alert>}
-      <input type="hidden" name="assets" value={JSON.stringify(assets)} />
+      {projectId ? (
+        <input type="hidden" name="projectId" value={projectId} />
+      ) : (
+        <input type="hidden" name="assets" value={JSON.stringify(assets)} />
+      )}
 
       <section className="space-y-4">
         <h2 className="font-medium">Projet</h2>
@@ -89,6 +95,7 @@ export function ProjectForm() {
         </div>
       </section>
 
+      {!projectId && (
       <section className="space-y-4">
         <div>
           <h2 className="font-medium">Ressources utilisées dans le montage</h2>
@@ -98,13 +105,18 @@ export function ProjectForm() {
         </div>
         <AssetEditor onChange={onAssets} />
       </section>
+      )}
 
       <div className="flex items-center justify-end gap-3 border-t border-neutral-200 pt-6">
-        <Link href="/projects" className={buttonClass("ghost")}>
+        <Link href={projectId ? `/projects/${projectId}` : "/projects"} className={buttonClass("ghost")}>
           Annuler
         </Link>
         <button type="submit" disabled={pending} className={buttonClass("primary")}>
-          {pending ? "Audit en cours…" : `Créer et auditer${assets.length ? ` (${assets.length} ressource${assets.length > 1 ? "s" : ""})` : ""}`}
+          {pending
+            ? "Audit en cours…"
+            : projectId
+              ? "Enregistrer et ré-auditer"
+              : `Créer et auditer${assets.length ? ` (${assets.length} ressource${assets.length > 1 ? "s" : ""})` : ""}`}
         </button>
       </div>
     </form>

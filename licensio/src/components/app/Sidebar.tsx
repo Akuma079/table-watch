@@ -5,11 +5,19 @@ import { logout } from "@/server/actions/auth";
 import { Logo } from "./Logo";
 import { NavLink } from "./NavLink";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { SubmitButton } from "@/components/ui/Button";
 
 export function Sidebar({ ctx }: { ctx: WorkspaceContext }) {
   return (
-    <aside className="flex w-full flex-col gap-6 border-b border-neutral-200 bg-white p-4 md:min-h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
-      <Logo />
+    <aside className="flex w-full flex-col gap-4 border-b border-neutral-200 bg-white p-4 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:gap-6 md:overflow-y-auto md:border-b-0 md:border-r">
+      <div className="flex items-center justify-between">
+        <Logo />
+        <form action={logout} className="md:hidden">
+          <SubmitButton variant={null} className="text-xs text-neutral-500 hover:text-neutral-900" pendingLabel="Déconnexion…">
+            Se déconnecter
+          </SubmitButton>
+        </form>
+      </div>
       <div className="space-y-2">
         <WorkspaceSwitcher activeId={ctx.workspace.id} workspaces={ctx.workspaces} />
         <p className="px-1 text-xs text-neutral-500">
@@ -24,20 +32,20 @@ export function Sidebar({ ctx }: { ctx: WorkspaceContext }) {
           )}
         </p>
       </div>
-      <nav className="flex flex-wrap gap-1 md:flex-col">
+      <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 md:mx-0 md:flex-col md:overflow-visible md:px-0">
         <NavLink href="/dashboard">Tableau de bord</NavLink>
         <NavLink href="/projects">Projets</NavLink>
         <NavLink href="/vault">Coffre-fort</NavLink>
-        {hasRole(ctx.role, "ADMIN") && <NavLink href="/settings/members">Membres</NavLink>}
+        <NavLink href="/settings/members">Membres</NavLink>
         <NavLink href="/settings/billing">Abonnement</NavLink>
       </nav>
-      <div className="mt-auto border-t border-neutral-100 pt-4">
+      <div className="mt-auto hidden border-t border-neutral-100 pt-4 md:block">
         <p className="truncate text-sm font-medium">{ctx.user.name ?? ctx.user.email}</p>
         <p className="truncate text-xs text-neutral-500">{ctx.user.email}</p>
         <form action={logout} className="mt-3">
-          <button type="submit" className="text-xs text-neutral-500 hover:text-neutral-900">
+          <SubmitButton variant={null} className="text-xs text-neutral-500 hover:text-neutral-900" pendingLabel="Déconnexion…">
             Se déconnecter
-          </button>
+          </SubmitButton>
         </form>
       </div>
     </aside>

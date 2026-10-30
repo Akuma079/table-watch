@@ -8,13 +8,15 @@ import { ComplianceBadge } from "@/components/projects/StatusBadges";
 import { buttonClass } from "@/components/ui/button-styles";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Alert } from "@/components/ui/Alert";
 
 export const metadata: Metadata = { title: "Projets" };
 
 // Rouge d'abord : ce qui demande une action remonte en tête.
 const STATUS_ORDER = { NON_COMPLIANT: 0, WARNING: 1, PENDING: 2, COMPLIANT: 3 } as const;
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
+  const { deleted } = await searchParams;
   const { workspace, role } = await requireWorkspace();
   const canEdit = hasRole(role, "MEMBER");
   const projects = await prisma.project.findMany({
@@ -35,6 +37,11 @@ export default async function ProjectsPage() {
 
   return (
     <>
+      {deleted && (
+        <div className="mb-6">
+          <Alert tone="success">Projet « {deleted} » supprimé, avec son historique d&apos;audit.</Alert>
+        </div>
+      )}
       <PageHeader
         title="Projets"
         description={

@@ -1,17 +1,21 @@
 "use client";
 
+import { SubmitButton } from "./Button";
+
 // Bouton d'envoi qui demande confirmation avant d'exécuter l'action du formulaire.
 export function ConfirmButton({
   action,
   fields,
   message,
   className,
+  pendingLabel,
   children,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   fields: Record<string, string>;
   message: string;
   className?: string;
+  pendingLabel?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -24,9 +28,9 @@ export function ConfirmButton({
       {Object.entries(fields).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
-      <button type="submit" className={className}>
+      <SubmitButton variant={null} className={className} pendingLabel={pendingLabel}>
         {children}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

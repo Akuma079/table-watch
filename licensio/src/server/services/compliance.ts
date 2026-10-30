@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { auditProject, startOfUtcDay, type AuditLicense, type ProjectResult } from "./compliance-rules";
 
-export async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
+async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
   const rows = await prisma.license.findMany({
     where: { workspaceId },
     select: {

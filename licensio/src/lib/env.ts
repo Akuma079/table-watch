@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// Une variable facultative laissée vide (VAR="") vaut « non définie ».
+const optionalUrl = z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional());
+
 // Variables serveur, validées au premier accès pour échouer tôt et clairement.
 const serverSchema = z.object({
   DATABASE_URL: z.string().url(),
@@ -18,11 +21,11 @@ const serverSchema = z.object({
   // "true" : TVA calculée par Stripe Tax (à activer dans le tableau de bord Stripe).
   STRIPE_TAX_ENABLED: z.string().optional(),
   // Autre point d'accès API (stripe-mock, tests) ; vide = API Stripe officielle.
-  STRIPE_API_BASE: z.string().url().optional(),
+  STRIPE_API_BASE: optionalUrl,
   // Emails d'invitation (facultatif : sans clé, le lien est à transmettre à la main).
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(), // ex. "Licensio <invitations@votre-domaine.com>"
-  RESEND_API_BASE: z.string().url().optional(),
+  RESEND_API_BASE: optionalUrl,
   // Secret des tâches planifiées (nettoyage des fichiers orphelins).
   CRON_SECRET: z.string().optional(),
 });

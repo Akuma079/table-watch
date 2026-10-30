@@ -12,6 +12,7 @@ import { UsageMeter } from "@/components/billing/UsageMeter";
 import { Alert } from "@/components/ui/Alert";
 import { buttonClass } from "@/components/ui/button-styles";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SubmitButton } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Mon abonnement" };
 
@@ -91,9 +92,9 @@ export default async function BillingPage({
               </Link>
               {workspace.stripeCustomerId && billingConfigured() && (
                 <form action={openBillingPortal}>
-                  <button type="submit" className={buttonClass("secondary")}>
+                  <SubmitButton variant={null} className={buttonClass("secondary")} pendingLabel="Ouverture du portail…">
                     {paid ? "Paiement, factures et résiliation" : "Factures"}
-                  </button>
+                  </SubmitButton>
                 </form>
               )}
             </div>

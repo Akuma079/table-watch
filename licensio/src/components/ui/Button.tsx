@@ -3,13 +3,24 @@
 import { useFormStatus } from "react-dom";
 import { buttonClass, type ButtonVariant } from "./button-styles";
 
-type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; pendingLabel?: string };
+type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  // null : `className` est utilisé tel quel (liens d'action discrets, boutons déjà stylés).
+  variant?: ButtonVariant | null;
+  pendingLabel?: React.ReactNode;
+};
 
-// Bouton d'envoi : se désactive pendant l'exécution de la Server Action du formulaire.
-export function SubmitButton({ variant = "primary", pendingLabel, className, children, ...props }: Props) {
+// Bouton d'envoi : se désactive pendant l'exécution de la Server Action du formulaire
+// (pas de double envoi), avec un libellé de progression facultatif.
+export function SubmitButton({ variant = "primary", pendingLabel, className, disabled, children, ...props }: Props) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending || props.disabled} className={buttonClass(variant, className)} {...props}>
+    <button
+      type="submit"
+      {...props}
+      disabled={pending || disabled}
+      aria-busy={pending || undefined}
+      className={variant === null ? className : buttonClass(variant, className)}
+    >
       {pending && pendingLabel ? pendingLabel : children}
     </button>
   );

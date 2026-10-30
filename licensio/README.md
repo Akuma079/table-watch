@@ -54,8 +54,10 @@ clic sur le lien. Pour aller plus vite en développement, la désactiver dans
 - **Espace actif** : cookie `licensio_workspace`, vérifié contre les appartenances à chaque
   requête. Toute requête Prisma sur les données doit filtrer sur `workspace.id`.
 - **Rôles** : Propriétaire > Administrateur > Membre > Lecture seule. Les administrateurs
-  invitent et retirent des membres ; seul le propriétaire nomme un administrateur ou
-  change les rôles.
+  renomment l'espace, invitent et retirent des membres ; seul le propriétaire nomme un
+  administrateur ou change les rôles. Tout membre voit l'équipe (page « Membres ») et peut
+  quitter l'espace ; le propriétaire ne le peut pas (l'espace et son abonnement resteraient
+  sans responsable).
 - **Invitations** : lien valable 7 jours, jeton stocké haché (SHA-256). Envoyé par email
   via [Resend](https://resend.com) si `RESEND_API_KEY` et `EMAIL_FROM` sont renseignés
   (domaine d'envoi à vérifier dans Resend) ; le lien reste aussi affiché une fois pour être
@@ -219,6 +221,29 @@ Sans variables Stripe, l'app fonctionne entièrement en plan Gratuit.
 | `STRIPE_*` | Abonnements, voir ci-dessus |
 | `PROCESSING_QUEUE_ENABLED` | File BullMQ (traitement média / OCR simulés) |
 
+## Production
+
+- **En-têtes de sécurité** (`next.config.ts`) : HSTS, `X-Frame-Options: SAMEORIGIN` (l'aperçu
+  des preuves PDF utilise un iframe de l'application), `nosniff`, `Referrer-Policy`
+  (`no-referrer` sur les passeports), `Permissions-Policy` ; en-tête `X-Powered-By` retiré.
+- **Erreurs** : `error.tsx` (dans l'application, la barre latérale reste affichée),
+  `global-error.tsx` et une page 404. En production, le message technique est masqué ;
+  la référence affichée (digest) se retrouve dans les journaux du serveur.
+- **Isolation des espaces** : chaque page et action filtre sur l'espace actif
+  (`requireWorkspace`), dont l'appartenance est revérifiée à chaque requête ; un élément
+  d'un autre espace renvoie « Page introuvable ». Les preuves passent par
+  `/api/documents/<id>` (contrôle d'appartenance, puis URL signée de 60 s).
+- **Formulaires** : boutons désactivés pendant l'envoi (pas de double soumission),
+  confirmation avant toute suppression, message de confirmation après.
+- Pas de `loading.tsx` global : avec Next 15, il rendait aléatoire le rafraîchissement de
+  la page après une action serveur (constaté en test), et masquait le statut HTTP 404.
+
+## Vérification
+
+```bash
+npx tsc --noEmit && npm run lint && npm test && npm run build
+```
+
 ## Données de démonstration
 
 Après inscription, `SEED_EMAIL=vous@exemple.com npm run db:seed` crée l'espace « Studio Démo »
@@ -228,7 +253,7 @@ restreinte, expiration proche) et rouge (licence manquante, licence personnelle,
 
 ## Arborescence
 
-✅ = en place · ⏳ = étape suivante
+✅ = en place
 
 ```
 licensio/

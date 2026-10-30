@@ -13,7 +13,7 @@ export function WorkspaceSwitcher({ activeId, workspaces }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   return (
     <div className="space-y-1.5">
-      <label htmlFor="workspaceId" className="px-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
+      <label htmlFor="workspaceId" className="sr-only px-1 text-xs font-medium uppercase tracking-wide text-neutral-400 md:not-sr-only">
         Espace de travail
       </label>
       <form ref={formRef} action={switchWorkspace}>

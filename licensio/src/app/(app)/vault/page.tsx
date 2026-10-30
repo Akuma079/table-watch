@@ -18,11 +18,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Coffre-fort" };
 
-type Search = { q?: string; platform?: string; type?: string; added?: string; updated?: string };
+const PAGE_SIZE = 50;
+
+type Search = { q?: string; platform?: string; type?: string; added?: string; updated?: string; deleted?: string; page?: string };
 
 export default async function VaultPage({ searchParams }: { searchParams: Promise<Search> }) {
   const { workspace, role } = await requireWorkspace();
-  const { q = "", platform = "", type = "", added, updated } = await searchParams;
+  const { q = "", platform = "", type = "", added, updated, deleted, page: pageParam } = await searchParams;
   const canEdit = hasRole(role, "MEMBER");
 
   const where: Prisma.LicenseWhereInput = { workspaceId: workspace.id };
@@ -37,7 +39,13 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   if (type in LICENSE_TYPE_LABELS) where.licenseType = type as LicenseType;
   const filtered = Boolean(q.trim() || where.platform || where.licenseType);
 
-  const [licenses, total] = await Promise.all([
+  const [matching, total] = await Promise.all([
+    prisma.license.count({ where }),
+    prisma.license.count({ where: { workspaceId: workspace.id } }),
+  ]);
+  const pageCount = Math.max(1, Math.ceil(matching / PAGE_SIZE));
+  const page = Math.min(pageCount, Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1));
+  const [licenses] = await Promise.all([
     prisma.license.findMany({
       where,
       orderBy: [{ purchaseDate: "desc" }, { createdAt: "desc" }],
@@ -47,12 +55,23 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
           orderBy: { createdAt: "asc" },
         },
       },
-      take: 200,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
-    prisma.license.count({ where: { workspaceId: workspace.id } }),
   ]);
-  const addedLicense = added ? licenses.find((l) => l.id === added) : undefined;
-  const updatedLicense = updated ? licenses.find((l) => l.id === updated) : undefined;
+  const pageHref = (n: number) => {
+    const qs = new URLSearchParams();
+    if (q.trim()) qs.set("q", q.trim());
+    if (where.platform) qs.set("platform", platform);
+    if (where.licenseType) qs.set("type", type);
+    if (n > 1) qs.set("page", String(n));
+    const s = qs.toString();
+    return s ? `/vault?${s}` : "/vault";
+  };
+  // Bandeaux de confirmation : la licence peut se trouver sur une autre page.
+  const notice = (id?: string) =>
+    id ? prisma.license.findFirst({ where: { id, workspaceId: workspace.id }, select: { assetName: true } }) : null;
+  const [addedLicense, updatedLicense] = await Promise.all([notice(added), notice(updated)]);
 
   return (
     <>
@@ -75,6 +94,11 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
       {addedLicense && (
         <div className="mb-6">
           <Alert tone="success">Licence « {addedLicense.assetName} » ajoutée au coffre-fort.</Alert>
+        </div>
+      )}
+      {deleted && (
+        <div className="mb-6">
+          <Alert tone="success">Licence « {deleted} » supprimée, avec ses preuves. Les projets ont été ré-audités.</Alert>
         </div>
       )}
       {updatedLicense && (
@@ -194,6 +218,28 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             </li>
           ))}
         </ul>
+      )}
+
+      {pageCount > 1 && (
+        <nav aria-label="Pagination" className="mt-6 flex items-center justify-between gap-3 text-sm">
+          {page > 1 ? (
+            <Link href={pageHref(page - 1)} className={buttonClass("secondary", "py-1.5")}>
+              ← Précédent
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-neutral-500">
+            Page {page} / {pageCount} · {matching} licence{matching > 1 ? "s" : ""}
+          </span>
+          {page < pageCount ? (
+            <Link href={pageHref(page + 1)} className={buttonClass("secondary", "py-1.5")}>
+              Suivant →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
       )}
     </>
   );

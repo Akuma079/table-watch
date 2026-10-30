@@ -9,6 +9,7 @@ import { billingConfigured, taxEnabled } from "@/server/billing/stripe";
 import { Logo } from "@/components/app/Logo";
 import { Alert } from "@/components/ui/Alert";
 import { buttonClass } from "@/components/ui/button-styles";
+import { SubmitButton } from "@/components/ui/Button";
 
 export const metadata: Metadata = { title: "Tarifs" };
 
@@ -71,9 +72,13 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
     return (
       <form action={startCheckout}>
         <input type="hidden" name="plan" value={key} />
-        <button type="submit" disabled={!configured} className={buttonClass(up ? "primary" : "secondary", "w-full")}>
+        <SubmitButton variant={null}
+          disabled={!configured}
+          className={buttonClass(up ? "primary" : "secondary", "w-full")}
+          pendingLabel={subscribed ? "Changement de forfait…" : "Redirection vers le paiement…"}
+        >
           {!configured ? "Paiement bientôt disponible" : `${up ? "Passer" : "Revenir"} au plan ${PLANS[key].name}`}
-        </button>
+        </SubmitButton>
         {subscribed && configured && (
           <p className="mt-2 text-center text-xs text-neutral-500">Changement immédiat, calculé au prorata.</p>
         )}

@@ -75,7 +75,13 @@ export function DocumentDropzone({ onChange }: Props) {
   }, [items, onChange]);
 
   async function upload(item: Item, file: File) {
-    const prepared = await prepareDocumentUpload({ fileName: file.name, mimeType: file.type, size: file.size });
+    let prepared: Awaited<ReturnType<typeof prepareDocumentUpload>>;
+    try {
+      prepared = await prepareDocumentUpload({ fileName: file.name, mimeType: file.type, size: file.size });
+    } catch {
+      // Réseau coupé ou session expirée : le fichier ne doit pas rester « en cours » indéfiniment.
+      return update(item.id, { status: "error", error: "Connexion au serveur impossible. Retirez le fichier et réessayez." });
+    }
     if ("error" in prepared) return update(item.id, { status: "error", error: prepared.error });
 
     const { xhr, done } = putFile(prepared.signedUrl, file, (progress) => update(item.id, { progress }));

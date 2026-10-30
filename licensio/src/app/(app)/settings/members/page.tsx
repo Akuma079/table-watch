@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { dateFormat, ROLE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
-import { removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
+import { leaveWorkspace, removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
 import { hasFeature, PLANS } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/billing/UpgradeNotice";
 import { InviteForm } from "@/components/workspace/InviteForm";
+import { RenameWorkspaceForm } from "@/components/workspace/RenameWorkspaceForm";
 import { Alert } from "@/components/ui/Alert";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
+import { SubmitButton } from "@/components/ui/Button";
+import { buttonClass } from "@/components/ui/button-styles";
 
 export const metadata: Metadata = { title: "Membres" };
 
 export default async function MembersPage({ searchParams }: { searchParams: Promise<{ created?: string }> }) {
   const ctx = await requireWorkspace();
-  if (!hasRole(ctx.role, "ADMIN")) redirect("/dashboard");
+  const isAdmin = hasRole(ctx.role, "ADMIN");
   const isOwner = ctx.role === "OWNER";
 
   const [members, invitations] = await Promise.all([
@@ -23,10 +26,12 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
       include: { user: { select: { name: true, email: true } } },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.invitation.findMany({
-      where: { workspaceId: ctx.workspace.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: "desc" },
-    }),
+    isAdmin
+      ? prisma.invitation.findMany({
+          where: { workspaceId: ctx.workspace.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+        })
+      : [],
   ]);
 
   return (
@@ -37,7 +42,19 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
         </div>
       )}
       <PageHeader title="Membres" description={`Qui a accès à « ${ctx.workspace.name} ».`} />
+      {!isAdmin && (
+        <p className="mb-6 text-sm text-neutral-500">
+          Vous êtes {ROLE_LABELS[ctx.role].toLowerCase()} dans cet espace. Seuls le propriétaire et les administrateurs gèrent les accès.
+        </p>
+      )}
 
+      {isAdmin && (
+        <section className="mb-6 rounded-xl border border-neutral-200 bg-white p-6">
+          <RenameWorkspaceForm name={ctx.workspace.name} />
+        </section>
+      )}
+
+      {isAdmin && (
       <section className="mb-10 rounded-xl border border-neutral-200 bg-white p-6">
         <h2 className="mb-4 font-medium">Inviter un collaborateur</h2>
         {hasFeature(ctx.workspace.plan, "multiUser") ? (
@@ -49,12 +66,13 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
           </UpgradeNotice>
         )}
       </section>
+      )}
 
       <section className="mb-10">
         <h2 className="mb-3 font-medium">Membres ({members.length})</h2>
         <ul className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
           {members.map((m) => {
-            const editable = m.role !== "OWNER" && m.userId !== ctx.user.id;
+            const editable = isAdmin && m.role !== "OWNER" && m.userId !== ctx.user.id;
             const removable = editable && (m.role !== "ADMIN" || isOwner);
             return (
               <li key={m.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -79,9 +97,9 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                         <option value="MEMBER">{ROLE_LABELS.MEMBER}</option>
                         <option value="VIEWER">{ROLE_LABELS.VIEWER}</option>
                       </select>
-                      <button type="submit" className="text-xs text-neutral-500 hover:text-neutral-900">
+                      <SubmitButton variant={null} className="text-xs text-neutral-500 hover:text-neutral-900" pendingLabel="…">
                         Enregistrer
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : (
                     <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600">
@@ -89,12 +107,15 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                     </span>
                   )}
                   {removable && (
-                    <form action={removeMember}>
-                      <input type="hidden" name="membershipId" value={m.id} />
-                      <button type="submit" className="text-xs text-red-600 hover:underline">
-                        Retirer
-                      </button>
-                    </form>
+                    <ConfirmButton
+                      action={removeMember}
+                      fields={{ membershipId: m.id }}
+                      message={`Retirer ${m.user.email} de « ${ctx.workspace.name} » ? Son accès est supprimé immédiatement.`}
+                      className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                      pendingLabel="Retrait…"
+                    >
+                      Retirer
+                    </ConfirmButton>
                   )}
                 </div>
               </li>
@@ -116,15 +137,35 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                     {dateFormat.format(inv.expiresAt)}
                   </p>
                 </div>
-                <form action={revokeInvitation}>
-                  <input type="hidden" name="invitationId" value={inv.id} />
-                  <button type="submit" className="text-xs text-red-600 hover:underline">
-                    Annuler
-                  </button>
-                </form>
+                <ConfirmButton
+                  action={revokeInvitation}
+                  fields={{ invitationId: inv.id }}
+                  message={`Annuler l'invitation de ${inv.email} ? Le lien envoyé ne fonctionnera plus.`}
+                  className="shrink-0 text-xs text-red-600 hover:underline disabled:opacity-50"
+                >
+                  Annuler
+                </ConfirmButton>
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {!isOwner && (
+        <section className="mt-10 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-medium">Quitter cet espace</h2>
+            <p className="text-sm text-neutral-500">Vous perdrez l&apos;accès à ses projets et à son coffre-fort.</p>
+          </div>
+          <ConfirmButton
+            action={leaveWorkspace}
+            fields={{}}
+            message={`Quitter « ${ctx.workspace.name} » ? Il faudra une nouvelle invitation pour y revenir.`}
+            className={buttonClass("danger", "shrink-0")}
+            pendingLabel="Départ…"
+          >
+            Quitter l&apos;espace
+          </ConfirmButton>
         </section>
       )}
     </>
