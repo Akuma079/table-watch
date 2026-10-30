@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { safeNextPath } from "@/lib/redirect";
 import { ForbiddenError, requireWorkspaceRole } from "@/server/auth";
 import { getDocumentQueue } from "@/server/queue/queues";
-import { auditWorkspaceProjects } from "@/server/services/compliance";
+import { auditAfterLicenseChange, auditProjects, projectsAffectedBy } from "@/server/services/compliance";
 import { normalizeAssetName } from "@/server/services/normalize";
 import {
   createDocumentUploadUrl,
@@ -221,7 +221,7 @@ export async function createLicense(_prev: FormState, formData: FormData): Promi
 
   await enqueueOcr(license.documents.map((d) => d.id));
   // Une nouvelle licence peut couvrir des ressources déjà déclarées dans des projets.
-  await auditWorkspaceProjects(ctx.workspace.id);
+  await auditAfterLicenseChange(ctx.workspace.id, [license]);
 
   revalidatePath("/vault");
   revalidatePath("/projects", "layout");
@@ -243,7 +243,7 @@ export async function updateLicense(_prev: FormState, formData: FormData): Promi
   }
   const existing = await prisma.license.findFirst({
     where: { id: str(formData, "licenseId"), workspaceId: ctx.workspace.id },
-    select: { id: true },
+    select: { id: true, assetName: true, normalizedName: true, author: true, sourceUrl: true },
   });
   if (!existing) return { error: "Licence introuvable.", values };
 
@@ -254,7 +254,7 @@ export async function updateLicense(_prev: FormState, formData: FormData): Promi
   }
   const data = parsed.data;
 
-  await prisma.license.update({
+  const updated = await prisma.license.update({
     where: { id: existing.id },
     data: {
       assetName: data.assetName,
@@ -272,8 +272,8 @@ export async function updateLicense(_prev: FormState, formData: FormData): Promi
       mustStayActive: data.mustStayActive,
     },
   });
-  // Titre, type ou expiration modifiés : les projets de l'espace peuvent changer de statut.
-  await auditWorkspaceProjects(ctx.workspace.id);
+  // Titre, type ou expiration modifiés : projets couverts avant et après la modification.
+  await auditAfterLicenseChange(ctx.workspace.id, [existing, updated]);
 
   revalidatePath("/vault");
   revalidatePath("/projects", "layout");
@@ -291,12 +291,14 @@ export async function deleteLicense(formData: FormData) {
   });
   if (!license) return;
 
+  // Avant la suppression : ensuite, les ressources ne sont plus associées à la licence.
+  const affected = await projectsAffectedBy(ctx.workspace.id, [license]);
   await prisma.license.delete({ where: { id: license.id } });
   // Après la base : un fichier orphelin vaut mieux qu'une licence pointant vers un fichier supprimé.
   await removeDocuments(license.documents.map((d) => d.storagePath)).catch((e) =>
     console.error("[storage] remove", e),
   );
-  await auditWorkspaceProjects(ctx.workspace.id);
+  await auditProjects(ctx.workspace.id, affected);
   revalidatePath("/vault");
   revalidatePath("/projects", "layout");
   revalidatePath("/dashboard");
@@ -315,7 +317,14 @@ export async function attachLicenseDocuments(_prev: FormState, formData: FormDat
   }
   const license = await prisma.license.findFirst({
     where: { id: str(formData, "licenseId"), workspaceId: ctx.workspace.id },
-    select: { id: true, _count: { select: { documents: true } } },
+    select: {
+      id: true,
+      assetName: true,
+      normalizedName: true,
+      author: true,
+      sourceUrl: true,
+      _count: { select: { documents: true } },
+    },
   });
   if (!license) return { error: "Licence introuvable." };
 
@@ -333,7 +342,7 @@ export async function attachLicenseDocuments(_prev: FormState, formData: FormDat
     checked.documents.map((d) => prisma.licenseDocument.create({ data: { ...d, licenseId: license.id }, select: { id: true } })),
   );
   await enqueueOcr(created.map((d) => d.id));
-  await auditWorkspaceProjects(ctx.workspace.id);
+  await auditAfterLicenseChange(ctx.workspace.id, [license]);
   revalidatePath("/vault");
   revalidatePath("/projects", "layout");
   revalidatePath("/dashboard");

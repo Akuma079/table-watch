@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Tableau de bord" };
 
 const AT_RISK_SHOWN = 8;
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ password?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ password?: string; workspaceDeleted?: string }> }) {
   const { workspace, role } = await requireWorkspace();
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
@@ -50,6 +50,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const atRiskTotal = count("NON_COMPLIANT") + count("WARNING");
   const projectCount = byStatus.reduce((n, r) => n + r._count, 0);
   const canEdit = hasRole(role, "MEMBER");
+  const query = await searchParams;
 
   const stats = [
     { label: "Conformes", value: count("COMPLIANT"), dot: statusDotClass("COMPLIANT") },
@@ -60,7 +61,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      {(await searchParams).password === "updated" && (
+      {query.workspaceDeleted && (
+        <div className="mb-6">
+          <Alert tone="success">L&apos;espace a été supprimé avec toutes ses données.</Alert>
+        </div>
+      )}
+      {query.password === "updated" && (
         <div className="mb-6">
           <Alert tone="success">Votre mot de passe a été modifié.</Alert>
         </div>

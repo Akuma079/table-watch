@@ -14,9 +14,9 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; accountDeleted?: string }>;
 }) {
-  const { next, error } = await searchParams;
+  const { next, error, accountDeleted } = await searchParams;
   const nextPath = safeNextPath(next);
   const registerHref = nextPath === "/dashboard" ? "/register" : `/register?next=${encodeURIComponent(nextPath)}`;
 
@@ -36,6 +36,11 @@ export default async function LoginPage({
       {error && ERRORS[error] && (
         <div className="mb-4">
           <Alert tone="error">{ERRORS[error]}</Alert>
+        </div>
+      )}
+      {accountDeleted && (
+        <div className="mb-4">
+          <Alert tone="success">Votre compte et vos données ont été supprimés.</Alert>
         </div>
       )}
       <LoginForm next={nextPath} />

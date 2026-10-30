@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { auditProject, evaluateAsset, suggestLicenses, titleSimilarity, type AuditAsset, type AuditLicense } from "./compliance-rules";
+import { auditProject, couldMatch, evaluateAsset, suggestLicenses, titleSimilarity, type AuditAsset, type AuditLicense } from "./compliance-rules";
 import { normalizeAssetName } from "./normalize";
 import { parseAssetLine } from "@/lib/asset-parse";
 
@@ -179,4 +179,13 @@ test("suggestions de licences au titre proche", () => {
   assert.equal(suggestLicenses(normalizeAssetName("Goldn Hour"), lics)[0].license.id, "lic1");
   assert.equal(suggestLicenses(normalizeAssetName("Tout autre chose"), lics).length, 0);
   assert.ok(titleSimilarity("golden hour", "golden hour") === 1);
+});
+
+test("ré-audit ciblé : une licence ne concerne que les ressources qu'elle peut couvrir", () => {
+  const lic = license({ sourceUrl: "https://artlist.io/song/golden-hour/123?ref=x" });
+  assert.ok(couldMatch(asset("Golden Hour"), lic), "même titre");
+  assert.ok(couldMatch(asset("Ikson - Golden Hour"), lic), "artiste + titre");
+  assert.ok(couldMatch(asset("Autre titre", { sourceUrl: "https://www.artlist.io/song/golden-hour/123" }), lic), "même lien");
+  assert.ok(!couldMatch(asset("Golden Hour Remix"), lic), "titre seulement proche : suggestion, pas correspondance");
+  assert.ok(!couldMatch(asset("Midnight Drive"), lic));
 });

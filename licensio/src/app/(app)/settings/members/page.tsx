@@ -2,16 +2,14 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { dateFormat, ROLE_LABELS } from "@/lib/labels";
 import { hasRole, requireWorkspace } from "@/server/auth";
-import { leaveWorkspace, removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
+import { removeMember, revokeInvitation, updateMemberRole } from "@/server/actions/workspaces";
 import { hasFeature, PLANS } from "@/lib/plans";
 import { UpgradeNotice } from "@/components/billing/UpgradeNotice";
 import { InviteForm } from "@/components/workspace/InviteForm";
-import { RenameWorkspaceForm } from "@/components/workspace/RenameWorkspaceForm";
 import { Alert } from "@/components/ui/Alert";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { SubmitButton } from "@/components/ui/Button";
-import { buttonClass } from "@/components/ui/button-styles";
 
 export const metadata: Metadata = { title: "Membres" };
 
@@ -46,12 +44,6 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
         <p className="mb-6 text-sm text-neutral-500">
           Vous êtes {ROLE_LABELS[ctx.role].toLowerCase()} dans cet espace. Seuls le propriétaire et les administrateurs gèrent les accès.
         </p>
-      )}
-
-      {isAdmin && (
-        <section className="mb-6 rounded-xl border border-neutral-200 bg-white p-6">
-          <RenameWorkspaceForm name={ctx.workspace.name} />
-        </section>
       )}
 
       {isAdmin && (
@@ -148,24 +140,6 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
               </li>
             ))}
           </ul>
-        </section>
-      )}
-
-      {!isOwner && (
-        <section className="mt-10 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-medium">Quitter cet espace</h2>
-            <p className="text-sm text-neutral-500">Vous perdrez l&apos;accès à ses projets et à son coffre-fort.</p>
-          </div>
-          <ConfirmButton
-            action={leaveWorkspace}
-            fields={{}}
-            message={`Quitter « ${ctx.workspace.name} » ? Il faudra une nouvelle invitation pour y revenir.`}
-            className={buttonClass("danger", "shrink-0")}
-            pendingLabel="Départ…"
-          >
-            Quitter l&apos;espace
-          </ConfirmButton>
         </section>
       )}
     </>

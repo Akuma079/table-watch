@@ -39,6 +39,10 @@ const FAQ = [
     q: "Que se passe-t-il si je repasse au plan Gratuit ?",
     a: `Vos projets, licences et preuves sont conservés ; au-delà des limites, vous ne pouvez plus en créer. Les Passeports déjà envoyés à vos clients restent consultables ${PASSPORT_GRACE_DAYS} jours, puis leurs liens cessent de répondre jusqu'à votre retour sur un forfait payant.`,
   },
+  {
+    q: "Combien d'espaces de travail puis-je créer ?",
+    a: "Un compte possède un seul espace gratuit. Chaque espace supplémentaire (un par client, par exemple) nécessite son propre forfait Creator ou Agence. Les espaces où vous êtes invité ne comptent pas.",
+  },
   { q: "Puis-je résilier à tout moment ?", a: "Oui, depuis « Mon abonnement ». Le forfait reste actif jusqu'à la fin de la période payée." },
 ];
 

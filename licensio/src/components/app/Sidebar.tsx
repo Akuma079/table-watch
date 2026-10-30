@@ -12,11 +12,16 @@ export function Sidebar({ ctx }: { ctx: WorkspaceContext }) {
     <aside className="flex w-full flex-col gap-4 border-b border-neutral-200 bg-white p-4 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:gap-6 md:overflow-y-auto md:border-b-0 md:border-r">
       <div className="flex items-center justify-between">
         <Logo />
-        <form action={logout} className="md:hidden">
+        <div className="flex items-center gap-3 md:hidden">
+          <a href="/settings/account" className="text-xs text-neutral-500 hover:text-neutral-900">
+            Mon compte
+          </a>
+        <form action={logout}>
           <SubmitButton variant={null} className="text-xs text-neutral-500 hover:text-neutral-900" pendingLabel="Déconnexion…">
             Se déconnecter
           </SubmitButton>
         </form>
+        </div>
       </div>
       <div className="space-y-2">
         <WorkspaceSwitcher activeId={ctx.workspace.id} workspaces={ctx.workspaces} />
@@ -38,10 +43,13 @@ export function Sidebar({ ctx }: { ctx: WorkspaceContext }) {
         <NavLink href="/vault">Coffre-fort</NavLink>
         <NavLink href="/settings/members">Membres</NavLink>
         <NavLink href="/settings/billing">Abonnement</NavLink>
+        <NavLink href="/settings/workspace">Paramètres</NavLink>
       </nav>
       <div className="mt-auto hidden border-t border-neutral-100 pt-4 md:block">
-        <p className="truncate text-sm font-medium">{ctx.user.name ?? ctx.user.email}</p>
-        <p className="truncate text-xs text-neutral-500">{ctx.user.email}</p>
+        <a href="/settings/account" className="block rounded-lg hover:text-neutral-600">
+          <p className="truncate text-sm font-medium">{ctx.user.name ?? ctx.user.email}</p>
+          <p className="truncate text-xs text-neutral-500">{ctx.user.email} · Mon compte</p>
+        </a>
         <form action={logout} className="mt-3">
           <SubmitButton variant={null} className="text-xs text-neutral-500 hover:text-neutral-900" pendingLabel="Déconnexion…">
             Se déconnecter

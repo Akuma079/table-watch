@@ -15,6 +15,7 @@ import {
   requireWorkspaceRole,
 } from "@/server/auth";
 import { hashInvitationToken, invitationExpiry, newInvitationToken } from "@/server/invitations";
+import { deleteWorkspaceData, ownedFreeWorkspace } from "@/server/workspaces";
 import { emailConfigured, invitationEmail, sendEmail } from "@/server/email";
 import { ROLE_LABELS } from "@/lib/labels";
 import { fieldErrors, str } from "./form";
@@ -35,6 +36,14 @@ export async function createWorkspace(_prev: FormState, formData: FormData): Pro
   const values = { name: str(formData, "name") };
   const parsed = z.object({ name: z.string().trim().min(2, "2 caractères minimum.").max(80) }).safeParse(values);
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+
+  const free = await ownedFreeWorkspace(user.id);
+  if (free) {
+    return {
+      error: `Vous avez déjà un espace gratuit (« ${free.name} »). Passez-le à un forfait payant, ou supprimez-le, pour créer un autre espace.`,
+      values,
+    };
+  }
 
   const workspace = await prisma.workspace.create({
     data: {
@@ -177,6 +186,47 @@ export async function renameWorkspace(_prev: FormState, formData: FormData): Pro
   await prisma.workspace.update({ where: { id: ctx.workspace.id }, data: { name: parsed.data.name } });
   revalidatePath("/", "layout");
   return { success: "Nom de l'espace enregistré.", values: { name: parsed.data.name } };
+}
+
+// Le propriétaire cède l'espace (et la gestion de son abonnement) à un autre membre ;
+// il en reste administrateur.
+export async function transferOwnership(formData: FormData) {
+  const ctx = await requireWorkspaceRole("OWNER");
+  const target = await prisma.membership.findFirst({
+    where: { id: str(formData, "membershipId"), workspaceId: ctx.workspace.id, userId: { not: ctx.user.id } },
+  });
+  if (!target) return;
+  await prisma.$transaction([
+    prisma.membership.update({ where: { id: target.id }, data: { role: "OWNER" } }),
+    prisma.membership.update({
+      where: { userId_workspaceId: { userId: ctx.user.id, workspaceId: ctx.workspace.id } },
+      data: { role: "ADMIN" },
+    }),
+  ]);
+  revalidatePath("/", "layout");
+  redirect("/settings/workspace?transferred=1");
+}
+
+// Suppression définitive de l'espace actif, confirmée en recopiant son nom.
+export async function deleteWorkspace(_prev: FormState, formData: FormData): Promise<FormState> {
+  let ctx;
+  try {
+    ctx = await requireWorkspaceRole("OWNER");
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { error: e.message };
+    throw e;
+  }
+  if (str(formData, "confirm").trim() !== ctx.workspace.name) {
+    return { fieldErrors: { confirm: "Recopiez exactement le nom de l'espace." } };
+  }
+  try {
+    await deleteWorkspaceData(ctx.workspace.id);
+  } catch (e) {
+    console.error("[workspace] suppression", e);
+    return { error: "La suppression a échoué (abonnement Stripe ?). Réessayez, ou résiliez d'abord l'abonnement." };
+  }
+  (await cookies()).delete(ACTIVE_WORKSPACE_COOKIE);
+  redirect(ctx.workspaces.length > 1 ? "/dashboard?workspaceDeleted=1" : "/workspaces/new");
 }
 
 // Quitter l'espace actif. Le propriétaire ne peut pas partir : l'espace (et son

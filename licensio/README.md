@@ -55,9 +55,12 @@ clic sur le lien. Pour aller plus vite en développement, la désactiver dans
   requête. Toute requête Prisma sur les données doit filtrer sur `workspace.id`.
 - **Rôles** : Propriétaire > Administrateur > Membre > Lecture seule. Les administrateurs
   renomment l'espace, invitent et retirent des membres ; seul le propriétaire nomme un
-  administrateur ou change les rôles. Tout membre voit l'équipe (page « Membres ») et peut
-  quitter l'espace ; le propriétaire ne le peut pas (l'espace et son abonnement resteraient
-  sans responsable).
+  administrateur, change les rôles, **transfère la propriété** ou **supprime l'espace**
+  (page « Paramètres »). Tout membre voit l'équipe (page « Membres ») et peut quitter
+  l'espace ; le propriétaire ne le peut pas (il transfère d'abord la propriété).
+- **Un seul espace gratuit possédé par compte** : sinon la limite du plan Gratuit se
+  contournerait en multipliant les espaces. Les espaces payants et ceux où l'on est invité
+  ne comptent pas. Vérifié côté serveur (`createWorkspace`).
 - **Invitations** : lien valable 7 jours, jeton stocké haché (SHA-256). Envoyé par email
   via [Resend](https://resend.com) si `RESEND_API_KEY` et `EMAIL_FROM` sont renseignés
   (domaine d'envoi à vérifier dans Resend) ; le lien reste aussi affiché une fois pour être
@@ -127,9 +130,11 @@ accepté). À plateforme égale de préférence ; parmi plusieurs licences, la m
 Statut du projet : rouge si une ressource est rouge, sinon orange si une est orange, sinon
 vert. Score = part des ressources couvertes (une ressource orange compte pour moitié).
 
-Recalcul : à chaque modification du projet, à chaque ajout/suppression de licence ou de
-preuve (tous les projets de l'espace), et à l'ouverture d'un projet audité un jour précédent
-(les expirations dépendent de la date).
+Recalcul : à chaque modification du projet ; à chaque ajout, modification ou suppression
+de licence ou de preuve, **seulement pour les projets concernés** (ressources associées à la
+licence, ou de même titre ou même lien : `projectsAffectedBy`), trois à la fois ; et à
+l'ouverture d'un projet audité un jour précédent (les expirations dépendent de la date).
+Mesuré sur un espace de 300 projets × 5 ressources : 4,7 s → 0,04 s par licence modifiée.
 
 **Expiration** : par défaut, une licence valable à la date de diffusion couvre la vidéo même
 si elle expire ensuite (Envato Elements, Artlist…). Pour une licence qui doit rester active
@@ -176,7 +181,7 @@ Certificat public d'un projet, à transmettre au client final.
 
 Forfaits définis dans `src/lib/plans.ts` (source unique : limites, fonctionnalités, page
 `/pricing`). L'abonnement est porté par l'**espace de travail**, pas par l'utilisateur.
-Tout nouvel espace démarre en plan Gratuit.
+Tout nouvel espace démarre en plan Gratuit (un seul espace gratuit possédé par compte).
 
 **Mise en place**
 1. Dans Stripe, créer deux produits avec un prix mensuel **TTC** : « Licensio Creator »
@@ -220,6 +225,21 @@ Sans variables Stripe, l'app fonctionne entièrement en plan Gratuit.
 | `CRON_SECRET` | Protège `/api/cron/storage-cleanup` (Vercel l'envoie automatiquement) |
 | `STRIPE_*` | Abonnements, voir ci-dessus |
 | `PROCESSING_QUEUE_ENABLED` | File BullMQ (traitement média / OCR simulés) |
+
+## RGPD
+
+- **Suppression d'un espace** (propriétaire, confirmée en recopiant son nom) : abonnement
+  Stripe résilié immédiatement, licences, preuves (base et stockage), projets, audits et
+  invitations effacés ; les liens de passeport cessent de fonctionner. Le client Stripe et
+  ses factures restent chez Stripe (obligations comptables).
+- **Transfert de propriété** : le propriétaire cède l'espace à un membre et en reste
+  administrateur.
+- **Suppression du compte** (« Mon compte », confirmée en recopiant son email) : refusée tant
+  que l'utilisateur possède un espace partagé avec d'autres membres (transfert ou suppression
+  d'abord). Les espaces où il est seul sont supprimés comme ci-dessus ; le compte Supabase
+  puis le profil sont effacés. Ce qu'il a créé dans les espaces partagés reste à l'équipe,
+  sans lien vers lui (`SetNull`).
+- **Rectification** : nom modifiable dans « Mon compte ».
 
 ## Production
 

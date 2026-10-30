@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { auditProject, startOfUtcDay, type AuditLicense, type ProjectResult } from "./compliance-rules";
+import { auditProject, couldMatch, licenseKeys, startOfUtcDay, type AuditLicense, type ProjectResult } from "./compliance-rules";
 
 async function loadLicenses(workspaceId: string): Promise<AuditLicense[]> {
   const rows = await prisma.license.findMany({
@@ -98,14 +98,51 @@ export async function checkCompliance(
   return result;
 }
 
-// Après un changement dans le coffre-fort (ajout, suppression, preuve jointe), tous les
-// projets de l'espace peuvent changer de statut : on les ré-audite.
-export async function auditWorkspaceProjects(workspaceId: string) {
-  const [projects, licenses] = await Promise.all([
-    prisma.project.findMany({ where: { workspaceId }, select: { id: true } }),
-    loadLicenses(workspaceId),
-  ]);
-  for (const p of projects) await checkCompliance(p.id, workspaceId, licenses);
+export type LicenseRef = { id: string; assetName: string; normalizedName: string; author: string | null; sourceUrl: string | null };
+
+// Projets dont le statut peut changer avec ces licences : ressources qui y sont déjà
+// associées, ou qu'elles peuvent couvrir (même titre, même lien). À appeler avant une
+// suppression, tant que les associations existent encore.
+export async function projectsAffectedBy(workspaceId: string, refs: LicenseRef[]) {
+  if (refs.length === 0) return [];
+  const keys = refs.flatMap((r) => [...licenseKeys(r)]);
+  const assets = await prisma.projectAsset.findMany({
+    where: {
+      project: { workspaceId },
+      OR: [
+        { licenseId: { in: refs.map((r) => r.id) } },
+        { normalizedName: { in: keys } },
+        ...(refs.some((r) => r.sourceUrl) ? [{ sourceUrl: { not: null } }] : []),
+      ],
+    },
+    select: { projectId: true, licenseId: true, normalizedName: true, sourceUrl: true },
+  });
+  const ids = new Set(refs.map((r) => r.id));
+  return [
+    ...new Set(
+      assets.filter((a) => (a.licenseId && ids.has(a.licenseId)) || refs.some((r) => couldMatch(a, r))).map((a) => a.projectId),
+    ),
+  ];
+}
+
+const AUDIT_CONCURRENCY = 3;
+
+// Ré-audite ces projets, quelques-uns à la fois, avec une seule lecture du coffre-fort.
+export async function auditProjects(workspaceId: string, projectIds: string[]) {
+  if (projectIds.length === 0) return;
+  const licenses = await loadLicenses(workspaceId);
+  const queue = [...projectIds];
+  await Promise.all(
+    Array.from({ length: Math.min(AUDIT_CONCURRENCY, queue.length) }, async () => {
+      for (let id = queue.shift(); id; id = queue.shift()) await checkCompliance(id, workspaceId, licenses);
+    }),
+  );
+}
+
+// Après un ajout ou une modification dans le coffre-fort : seuls les projets concernés
+// sont ré-audités (les autres sont recalculés à leur prochaine ouverture s'ils datent d'hier).
+export async function auditAfterLicenseChange(workspaceId: string, refs: LicenseRef[]) {
+  await auditProjects(workspaceId, await projectsAffectedBy(workspaceId, refs));
 }
 
 // Les expirations dépendent de la date du jour : un audit d'hier peut être périmé.

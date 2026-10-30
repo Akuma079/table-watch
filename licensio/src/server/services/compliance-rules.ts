@@ -93,7 +93,7 @@ function platformName(license: AuditLicense) {
 
 // Clés sous lesquelles une licence peut être retrouvée : son titre seul, ou combiné à
 // l'auteur (« Golden Hour Ikson », « Ikson Golden Hour ») pour les listes collées telles quelles.
-function licenseKeys(license: AuditLicense): Set<string> {
+export function licenseKeys(license: MatchLicense): Set<string> {
   const keys = new Set([license.normalizedName]);
   if (license.author) {
     keys.add(normalizeAssetName(`${license.assetName} ${license.author}`));
@@ -102,8 +102,17 @@ function licenseKeys(license: AuditLicense): Set<string> {
   return keys;
 }
 
-function sameSource(asset: AuditAsset, license: AuditLicense) {
+type MatchLicense = Pick<AuditLicense, "normalizedName" | "assetName" | "author" | "sourceUrl">;
+type MatchAsset = Pick<AuditAsset, "normalizedName" | "sourceUrl">;
+
+function sameSource(asset: MatchAsset, license: MatchLicense) {
   return Boolean(asset.sourceUrl && license.sourceUrl && normalizeUrl(asset.sourceUrl) === normalizeUrl(license.sourceUrl));
+}
+
+// Une ressource que cette licence peut couvrir par correspondance automatique (même règle
+// que l'audit). Sert à ne ré-auditer que les projets concernés par un changement.
+export function couldMatch(asset: MatchAsset, license: MatchLicense) {
+  return sameSource(asset, license) || licenseKeys(license).has(asset.normalizedName);
 }
 
 // Vérifie une licence donnée pour une ressource et un projet.

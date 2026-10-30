@@ -1,7 +1,13 @@
-import { Document, Image, Page, Path, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
+import { Document, Font, Image, Page, Path, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import type { ComplianceStatus, FindingSeverity } from "@prisma/client";
 import { ASSET_TYPE_LABELS, dateFormat, dayFormat, LICENSE_TYPE_LABELS, PROJECT_USAGE_LABELS } from "@/lib/labels";
 import { PASSPORT_VERDICT, type Passport } from "./data";
+
+// Pas de césure automatique : ses règles (anglaises) coupaient mal les mots français
+// (« cof-fre-fort », « cinéma-tique »). Les mots passent entiers à la ligne.
+Font.registerHyphenationCallback((word) => [word]);
+
+const shortDate = new Intl.DateTimeFormat("fr-BE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 
 // Polices PDF standard (Helvetica) : accents français couverts, pas de téléchargement.
 // Les pictogrammes sont dessinés en SVG, Helvetica n'ayant pas de ✓.
@@ -36,8 +42,8 @@ const s = StyleSheet.create({
   tr: { flexDirection: "row", paddingVertical: 7, paddingHorizontal: 6, borderBottom: "1 solid #f0f0f0" },
   cName: { width: "34%", paddingRight: 6 },
   cLicense: { width: "16%", paddingRight: 6 },
-  cKey: { width: "20%", paddingRight: 6 },
-  cValid: { width: "17%", paddingRight: 6 },
+  cKey: { width: "18%", paddingRight: 6 },
+  cValid: { width: "19%", paddingRight: 6 },
   cStatus: { width: "13%" },
   muted: { color: "#737373", fontSize: 8 },
   mono: { fontFamily: "Courier", fontSize: 8.5 },
@@ -134,8 +140,8 @@ export function PassportDocument({ passport: p, qrDataUrl, generatedAt }: { pass
             <Text style={s.cLicense}>{a.licenseType ? LICENSE_TYPE_LABELS[a.licenseType] : "—"}</Text>
             <Text style={[s.cKey, s.mono]}>{a.licenseType ? (a.licenseKey ?? "non renseigné") : "—"}</Text>
             <View style={s.cValid}>
-              {a.purchaseDate && <Text>Depuis le {dayFormat.format(a.purchaseDate)}</Text>}
-              {a.licenseType && <Text style={s.muted}>{a.expiresAt ? `Jusqu'au ${dayFormat.format(a.expiresAt)}` : "Sans expiration"}</Text>}
+              {a.purchaseDate && <Text>Du {shortDate.format(a.purchaseDate)}</Text>}
+              {a.licenseType && <Text style={s.muted}>{a.expiresAt ? `au ${shortDate.format(a.expiresAt)}` : "Sans expiration"}</Text>}
             </View>
             <Text style={[s.cStatus, { color: ROW[a.severity].color, fontFamily: "Helvetica-Bold" }]}>{ROW[a.severity].label}</Text>
           </View>
