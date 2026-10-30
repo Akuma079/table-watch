@@ -13,11 +13,13 @@ cp .env.example .env          # renseigner Supabase
 docker compose up -d          # PostgreSQL + Redis en local
 npm install
 npm run db:migrate            # applique prisma/migrations
+npm run storage:setup         # crée le bucket privé des preuves de licence
 npm run dev                   # http://localhost:3000
 npm run worker                # dans un 2e terminal : traitement média / OCR (simulé)
 ```
 
-Dans Supabase, créer deux buckets **privés** : `license-documents` et `project-media`.
+`npm run storage:setup` crée le bucket privé `license-documents` (15 Mo max, PDF/PNG/JPEG/WebP).
+Le bucket `project-media` (médias des projets) sera ajouté avec les projets.
 
 ### Configuration de Supabase Auth
 
@@ -72,6 +74,25 @@ User ── Membership ── Workspace ─┬─ License ── LicenseDocument
   résultat (vert / rouge / en attente) affiché au tableau de bord.
 - Le **Passeport de Droits** est servi publiquement via `Project.passportToken`.
 
+## Coffre-fort & stockage des preuves
+
+1. Le navigateur demande une URL d'envoi signée (`prepareDocumentUpload`) : le serveur
+   vérifie le rôle (Membre minimum), le type et la taille, et choisit le chemin
+   `<workspaceId>/<uuid>/<fichier>`.
+2. Le fichier part **directement** du navigateur vers Supabase Storage (PUT, barre de
+   progression), sans passer par le serveur Next : aucune limite de taille de requête,
+   y compris sur Vercel.
+3. À l'enregistrement (`createLicense`), le serveur vérifie que chaque chemin appartient à
+   l'espace actif et relit taille et type réels dans Storage avant d'écrire en base.
+4. Aperçu et téléchargement passent par `/api/documents/<id>` : contrôle d'appartenance à
+   l'espace, puis redirection vers une URL signée valable 60 secondes. Le bucket reste privé.
+
+Limites actuelles :
+- un fichier envoyé puis abandonné (formulaire jamais validé) reste dans le bucket ; un
+  nettoyage périodique des fichiers non rattachés est à prévoir ;
+- on ne peut pas encore ajouter de preuve à une licence existante, ni la modifier ;
+- l'OCR (simulé) n'est déclenché que si `PROCESSING_QUEUE_ENABLED="true"`.
+
 ## Arborescence
 
 ✅ = en place · ⏳ = étape suivante
@@ -94,25 +115,30 @@ licensio/
 │  │  ├─ (app)/dashboard/page.tsx      ✅ compteurs (version simple)
 │  │  ├─ (app)/settings/members        ✅ membres, rôles, invitations
 │  │  ├─ (app)/projects/page.tsx       ✅ liste simple · ⏳ création, détail, audit
-│  │  ├─ (app)/vault/page.tsx          ✅ liste simple · ⏳ formulaire licence + PDF
+│  │  ├─ (app)/vault/page.tsx          ✅ liste, recherche, filtres, aperçu, téléchargement
+│  │  ├─ (app)/vault/new/page.tsx      ✅ formulaire + glisser-déposer
+│  │  ├─ api/documents/[id]/route.ts   ✅ aperçu / téléchargement (URL signée)
 │  │  ├─ passport/[token]/page.tsx     ⏳ Passeport de Droits public
 │  │  └─ passport/[token]/pdf/route.ts ⏳ export PDF
-│  ├─ components/                      ✅ ui/, auth/, app/, workspace/
+│  ├─ components/                      ✅ ui/, auth/, app/, workspace/, vault/
 │  ├─ lib/
 │  │  ├─ env.ts, prisma.ts, redirect.ts, slug.ts, labels.ts, cn.ts ✅
+│  │  ├─ documents.ts                  ✅ types et tailles acceptés
 │  │  └─ supabase/{client,server,middleware}.ts ✅
 │  └─ server/
 │     ├─ auth.ts                       ✅ utilisateur, espace actif, rôles
 │     ├─ invitations.ts                ✅ jetons d'invitation
 │     ├─ actions/auth.ts               ✅ connexion, inscription, mot de passe
 │     ├─ actions/workspaces.ts         ✅ espaces, invitations, membres
-│     ├─ actions/licenses.ts           ⏳ ajout licence + upload Storage
+│     ├─ storage.ts                    ✅ URLs signées, vérification, suppression
+│     ├─ actions/licenses.ts           ✅ envoi, création, suppression de licences
 │     ├─ actions/projects.ts           ⏳ projet, médias, ressources déclarées
-│     ├─ services/normalize.ts         ⏳ normalisation des noms
+│     ├─ services/normalize.ts         ✅ normalisation des noms
 │     ├─ services/compliance.ts        ⏳ correspondance + contrôle de conformité
 │     ├─ processing/fingerprint.ts     ✅ placeholder empreinte audio
 │     ├─ processing/ocr.ts             ✅ placeholder OCR
 │     └─ queue/{connection,queues,worker}.ts ✅ BullMQ
+├─ scripts/setup-storage.ts           ✅ création du bucket
 ├─ docker-compose.yml                  ✅
 └─ .env.example                        ✅
 ```

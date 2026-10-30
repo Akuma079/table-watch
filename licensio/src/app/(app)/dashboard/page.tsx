@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspace } from "@/server/auth";
 import { Alert } from "@/components/ui/Alert";
-import { buttonClass } from "@/components/ui/Button";
+import { buttonClass } from "@/components/ui/button-styles";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Tableau de bord" };

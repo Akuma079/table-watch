@@ -1,0 +1,225 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { DOCUMENT_MAX_BYTES, DOCUMENT_MAX_FILES, isAllowedDocumentType } from "@/lib/documents";
+import { prisma } from "@/lib/prisma";
+import { ForbiddenError, requireWorkspaceRole } from "@/server/auth";
+import { getDocumentQueue } from "@/server/queue/queues";
+import { normalizeAssetName } from "@/server/services/normalize";
+import {
+  createDocumentUploadUrl,
+  getDocumentInfo,
+  removeDocuments,
+  workspacePrefix,
+} from "@/server/storage";
+import { fieldErrors, str } from "./form";
+import type { FormState } from "./types";
+
+// ───────── Envoi des fichiers (appelé par la zone de dépôt, avant l'enregistrement) ─────────
+
+export type PrepareUploadResult = { path: string; signedUrl: string } | { error: string };
+
+export async function prepareDocumentUpload(input: {
+  fileName: string;
+  mimeType: string;
+  size: number;
+}): Promise<PrepareUploadResult> {
+  let ctx;
+  try {
+    ctx = await requireWorkspaceRole("MEMBER");
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { error: e.message };
+    throw e;
+  }
+  if (!isAllowedDocumentType(input.mimeType)) return { error: "Format accepté : PDF, PNG, JPEG ou WebP." };
+  if (!(input.size > 0) || input.size > DOCUMENT_MAX_BYTES) return { error: "Fichier vide ou trop lourd (15 Mo max)." };
+
+  try {
+    return await createDocumentUploadUrl(ctx.workspace.id, input.fileName);
+  } catch (e) {
+    console.error("[storage] createSignedUploadUrl", e);
+    return { error: "Le stockage est indisponible. Réessayez dans un instant." };
+  }
+}
+
+// Fichier retiré de la zone de dépôt avant l'enregistrement de la licence.
+export async function discardDocumentUpload(path: string) {
+  const ctx = await requireWorkspaceRole("MEMBER");
+  if (!path.startsWith(workspacePrefix(ctx.workspace.id))) return;
+  // Ne jamais supprimer un fichier déjà rattaché à une licence.
+  const used = await prisma.licenseDocument.findUnique({ where: { storagePath: path }, select: { id: true } });
+  if (!used) await removeDocuments([path]).catch((e) => console.error("[storage] remove", e));
+}
+
+// ───────── Création d'une licence ─────────
+
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide.")
+  .transform((v) => new Date(`${v}T00:00:00.000Z`));
+
+const documentInput = z.object({
+  storagePath: z.string().min(1),
+  fileName: z.string().min(1).max(255),
+  kind: z.enum(["LICENSE_CERTIFICATE", "INVOICE", "RECEIPT", "OTHER"]),
+});
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => v || null);
+
+const licenseInput = z
+  .object({
+    assetName: z.string().trim().min(1, "Indiquez le titre de la ressource.").max(200),
+    author: optionalText(200),
+    assetType: z.enum(["MUSIC", "SFX", "STOCK_VIDEO", "IMAGE", "FONT", "OTHER"]),
+    platform: z.enum(
+      [
+        "ARTLIST",
+        "ENVATO_ELEMENTS",
+        "EPIDEMIC_SOUND",
+        "ARTGRID",
+        "MUSICBED",
+        "SOUNDSTRIPE",
+        "STORYBLOCKS",
+        "SHUTTERSTOCK",
+        "ADOBE_STOCK",
+        "POND5",
+        "OTHER",
+      ],
+      { message: "Choisissez une plateforme." },
+    ),
+    platformOther: optionalText(100),
+    licenseType: z.enum(["PERSONAL", "COMMERCIAL", "EXTENDED", "RESTRICTED"], {
+      message: "Choisissez un type de licence.",
+    }),
+    purchaseDate: z.string().min(1, "Indiquez la date d'achat.").pipe(isoDate),
+    expiresAt: z.union([z.literal("").transform(() => null), isoDate]),
+    licenseKey: optionalText(200),
+    sourceUrl: z.union([z.literal("").transform(() => null), z.string().trim().url("Lien invalide.").max(500)]),
+    notes: optionalText(2000),
+    documents: z.array(documentInput).max(DOCUMENT_MAX_FILES, `${DOCUMENT_MAX_FILES} fichiers maximum.`),
+  })
+  .superRefine((d, ctx) => {
+    if (d.platform === "OTHER" && !d.platformOther) {
+      ctx.addIssue({ code: "custom", path: ["platformOther"], message: "Précisez la plateforme." });
+    }
+    if (d.purchaseDate.getTime() > Date.now()) {
+      ctx.addIssue({ code: "custom", path: ["purchaseDate"], message: "La date d'achat est dans le futur." });
+    }
+    if (d.expiresAt && d.expiresAt < d.purchaseDate) {
+      ctx.addIssue({ code: "custom", path: ["expiresAt"], message: "L'expiration précède la date d'achat." });
+    }
+  });
+
+const TEXT_FIELDS = [
+  "assetName",
+  "author",
+  "assetType",
+  "platform",
+  "platformOther",
+  "licenseType",
+  "purchaseDate",
+  "expiresAt",
+  "licenseKey",
+  "sourceUrl",
+  "notes",
+] as const;
+
+function parseDocuments(raw: string): unknown {
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return null;
+  }
+}
+
+export async function createLicense(_prev: FormState, formData: FormData): Promise<FormState> {
+  const values = Object.fromEntries(TEXT_FIELDS.map((k) => [k, str(formData, k)]));
+  let ctx;
+  try {
+    ctx = await requireWorkspaceRole("MEMBER");
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { error: e.message, values };
+    throw e;
+  }
+
+  const parsed = licenseInput.safeParse({ ...values, documents: parseDocuments(str(formData, "documents")) });
+  if (!parsed.success) {
+    return { error: "Certains champs sont à corriger.", fieldErrors: fieldErrors(parsed.error), values };
+  }
+  const data = parsed.data;
+
+  // Chaque fichier doit appartenir à l'espace actif et exister réellement dans le bucket ;
+  // taille et type sont relus côté Storage.
+  const prefix = workspacePrefix(ctx.workspace.id);
+  const documents = [];
+  for (const doc of data.documents) {
+    const info = doc.storagePath.startsWith(prefix) ? await getDocumentInfo(doc.storagePath) : null;
+    if (!info) return { error: `Le fichier « ${doc.fileName} » est introuvable. Ajoutez-le à nouveau.`, values };
+    documents.push({
+      kind: doc.kind,
+      fileName: doc.fileName,
+      storagePath: doc.storagePath,
+      mimeType: info.contentType,
+      sizeBytes: info.size,
+      uploadedById: ctx.user.id,
+    });
+  }
+
+  const license = await prisma.license.create({
+    data: {
+      workspaceId: ctx.workspace.id,
+      createdById: ctx.user.id,
+      assetName: data.assetName,
+      normalizedName: normalizeAssetName(data.assetName),
+      author: data.author,
+      assetType: data.assetType,
+      platform: data.platform,
+      platformOther: data.platform === "OTHER" ? data.platformOther : null,
+      licenseType: data.licenseType,
+      purchaseDate: data.purchaseDate,
+      expiresAt: data.expiresAt,
+      licenseKey: data.licenseKey,
+      sourceUrl: data.sourceUrl,
+      notes: data.notes,
+      documents: { create: documents },
+    },
+    include: { documents: { select: { id: true } } },
+  });
+
+  if (process.env.PROCESSING_QUEUE_ENABLED === "true" && license.documents.length > 0) {
+    await prisma.licenseDocument.updateMany({ where: { licenseId: license.id }, data: { ocrStatus: "QUEUED" } });
+    await getDocumentQueue().addBulk(
+      license.documents.map((d) => ({ name: "ocr", data: { documentId: d.id }, opts: { jobId: `ocr:${d.id}` } })),
+    );
+  }
+
+  revalidatePath("/vault");
+  revalidatePath("/dashboard");
+  redirect(`/vault?added=${license.id}`);
+}
+
+// ───────── Suppression ─────────
+
+export async function deleteLicense(formData: FormData) {
+  const ctx = await requireWorkspaceRole("MEMBER");
+  const license = await prisma.license.findFirst({
+    where: { id: str(formData, "licenseId"), workspaceId: ctx.workspace.id },
+    include: { documents: { select: { storagePath: true } } },
+  });
+  if (!license) return;
+
+  await prisma.license.delete({ where: { id: license.id } });
+  // Après la base : un fichier orphelin vaut mieux qu'une licence pointant vers un fichier supprimé.
+  await removeDocuments(license.documents.map((d) => d.storagePath)).catch((e) =>
+    console.error("[storage] remove", e),
+  );
+  revalidatePath("/vault");
+  revalidatePath("/dashboard");
+}

@@ -8,7 +8,7 @@ import { Logo } from "@/components/app/Logo";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { AcceptInvitationForm } from "@/components/workspace/AcceptInvitationForm";
 import { Alert } from "@/components/ui/Alert";
-import { buttonClass } from "@/components/ui/Button";
+import { buttonClass } from "@/components/ui/button-styles";
 
 export const metadata: Metadata = { title: "Invitation" };
 

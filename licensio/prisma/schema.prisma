@@ -123,11 +123,15 @@ enum AssetType {
   OTHER
 }
 
-// Ordre croissant de droits : PERSONAL < COMMERCIAL < EXTENDED.
+// PERSONAL < COMMERCIAL < EXTENDED : niveaux croissants de droits.
+// RESTRICTED (« utilité restreinte ») : droits limités par des conditions propres à la
+// licence (un seul projet, usage éditorial, plateforme précise…) ; l'audit la signale
+// pour vérification manuelle plutôt que de la classer automatiquement.
 enum LicenseType {
   PERSONAL
   COMMERCIAL
   EXTENDED
+  RESTRICTED
 }
 
 model License {
@@ -138,6 +142,7 @@ model License {
   assetName      String
   // Nom normalisé (minuscules, sans accents ni ponctuation) pour la correspondance.
   normalizedName String
+  author         String? // artiste, compositeur, auteur de la ressource
   assetType      AssetType   @default(MUSIC)
   platform       Platform
   platformOther  String? // libellé libre si platform = OTHER
@@ -185,7 +190,8 @@ model LicenseDocument {
   uploadedById String?      @db.Uuid
   kind         DocumentKind @default(LICENSE_CERTIFICATE)
   fileName     String
-  storagePath  String       @unique // chemin dans le bucket Supabase "license-documents"
+  // Chemin dans le bucket "license-documents" : <workspaceId>/<uuid>/<nom-du-fichier>
+  storagePath  String       @unique
   mimeType     String
   sizeBytes    Int
   sha256       String? // empreinte du fichier, détection des doublons

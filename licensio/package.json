@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "storage:setup": "tsx --env-file=.env scripts/setup-storage.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

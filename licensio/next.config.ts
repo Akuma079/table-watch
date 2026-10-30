@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  experimental: {
-    // Les PDF de licence passent par les Server Actions : on relève la limite par défaut (1 Mo).
-    serverActions: { bodySizeLimit: "20mb" },
-  },
-};
+// Les fichiers (preuves de licence) ne passent pas par les Server Actions : le navigateur
+// les envoie directement à Supabase Storage via une URL signée. La limite par défaut
+// des Server Actions (1 Mo) suffit donc.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
