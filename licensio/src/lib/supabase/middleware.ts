@@ -1,8 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Routes accessibles sans session.
-const PUBLIC_PREFIXES = ["/login", "/auth", "/passport"];
+// Pages réservées aux visiteurs : un utilisateur connecté est renvoyé au tableau de bord.
+const GUEST_ONLY = ["/login", "/register", "/forgot-password"];
+// Accessibles sans session. Tout le reste (/dashboard, /vault, /projects, /settings…)
+// exige d'être connecté.
+const PUBLIC_PREFIXES = [...GUEST_ONLY, "/auth", "/passport", "/invite"];
+
+function matches(pathname: string, prefixes: string[]) {
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -26,14 +33,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  const isPublic = pathname === "/" || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
-  if (!user && !isPublic) {
+  const { pathname, search } = request.nextUrl;
+
+  if (!user && !matches(pathname, PUBLIC_PREFIXES)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+    url.search = "";
+    if (pathname !== "/") url.searchParams.set("next", pathname + search);
+    return redirectWithCookies(url, response);
+  }
+
+  if (user && matches(pathname, GUEST_ONLY)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.search = "";
+    return redirectWithCookies(url, response);
   }
 
   return response;
+}
+
+// Une redirection doit conserver les cookies de session rafraîchis par getUser().
+function redirectWithCookies(url: URL, from: NextResponse) {
+  const redirect = NextResponse.redirect(url);
+  from.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+  return redirect;
 }

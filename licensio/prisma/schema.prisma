@@ -1,8 +1,9 @@
 // Licensio — schéma de base de données
 //
 // Principes :
-// - Tout appartient à une Team. Chaque utilisateur reçoit une équipe personnelle
-//   à l'inscription : un créateur solo et une agence utilisent le même modèle.
+// - Tout appartient à un Workspace (espace de travail). Chaque utilisateur reçoit un
+//   espace personnel à sa première connexion : un créateur solo et une agence utilisent
+//   le même modèle. Une agence crée un espace dédié et y invite ses collaborateurs.
 // - User.id = l'identifiant Supabase Auth (auth.users.id) ; pas de mot de passe ici.
 // - Les fichiers (PDF de licence, factures, médias) vivent dans Supabase Storage ;
 //   la base ne garde que leur chemin (storagePath).
@@ -17,7 +18,7 @@ datasource db {
   directUrl = env("DIRECT_URL") // connexion directe (port 5432) pour les migrations
 }
 
-// ───────────────────────── Comptes & équipes ─────────────────────────
+// ───────────────────────── Comptes & espaces de travail ─────────────────────────
 
 model User {
   id        String   @id @db.Uuid
@@ -28,6 +29,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   memberships       Membership[]
+  invitationsSent   Invitation[]      @relation("InvitationInvitedBy")
   licensesCreated   License[]         @relation("LicenseCreatedBy")
   projectsCreated   Project[]         @relation("ProjectCreatedBy")
   documentsUploaded LicenseDocument[]
@@ -35,7 +37,7 @@ model User {
   @@map("users")
 }
 
-model Team {
+model Workspace {
   id         String   @id @default(cuid())
   name       String
   slug       String   @unique
@@ -43,14 +45,18 @@ model Team {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  members  Membership[]
-  licenses License[]
-  projects Project[]
+  members     Membership[]
+  invitations Invitation[]
+  licenses    License[]
+  projects    Project[]
 
-  @@map("teams")
+  @@map("workspaces")
 }
 
-enum TeamRole {
+// OWNER : tout, dont la gestion des membres ; un seul par espace (le créateur).
+// ADMIN : gère les membres et invitations. MEMBER : licences et projets.
+// VIEWER : lecture seule (ex. un client de l'agence).
+enum WorkspaceRole {
   OWNER
   ADMIN
   MEMBER
@@ -58,18 +64,38 @@ enum TeamRole {
 }
 
 model Membership {
-  id        String   @id @default(cuid())
-  userId    String   @db.Uuid
-  teamId    String
-  role      TeamRole @default(MEMBER)
-  createdAt DateTime @default(now())
+  id          String        @id @default(cuid())
+  userId      String        @db.Uuid
+  workspaceId String
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, teamId])
-  @@index([teamId])
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
   @@map("memberships")
+}
+
+model Invitation {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String // en minuscules
+  role        WorkspaceRole @default(MEMBER)
+  // SHA-256 du jeton envoyé dans le lien : la base ne contient jamais le jeton lui-même.
+  tokenHash   String        @unique
+  invitedById String?       @db.Uuid
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User?     @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, email])
+  @@map("invitations")
 }
 
 // ───────────────────────── Coffre-fort ─────────────────────────
@@ -106,7 +132,7 @@ enum LicenseType {
 
 model License {
   id          String  @id @default(cuid())
-  teamId      String
+  workspaceId String
   createdById String? @db.Uuid
 
   assetName      String
@@ -128,13 +154,13 @@ model License {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  team      Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User?             @relation("LicenseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   documents LicenseDocument[]
   usages    ProjectAsset[]
 
-  @@index([teamId, normalizedName])
-  @@index([teamId, platform])
+  @@index([workspaceId, normalizedName])
+  @@index([workspaceId, platform])
   @@map("licenses")
 }
 
@@ -197,7 +223,7 @@ enum ComplianceStatus {
 
 model Project {
   id          String       @id @default(cuid())
-  teamId      String
+  workspaceId String
   createdById String?      @db.Uuid
   name        String
   clientName  String?
@@ -215,13 +241,13 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User?          @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   media     MediaFile[]
   assets    ProjectAsset[]
   audits    AuditRun[]
 
-  @@index([teamId, complianceStatus])
+  @@index([workspaceId, complianceStatus])
   @@map("projects")
 }
 
